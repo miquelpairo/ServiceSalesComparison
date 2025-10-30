@@ -201,143 +201,47 @@ if file1 and file2:
         'Productline': 'Productline'
     }
     
-    with st.expander("🔧 Ajustar mapeo de columnas (solo si es necesario)", expanded=False):
+    # Usar siempre valores por defecto (sin expander para simplificar)
+    col_fecha_1 = default_cols['Fecha'] if default_cols['Fecha'] in df1.columns else df1.columns[0]
+    col_cliente_1 = default_cols['Cliente'] if default_cols['Cliente'] in df1.columns else df1.columns[0]
+    col_producto_1 = default_cols['Producto'] if default_cols['Producto'] in df1.columns else df1.columns[0]
+    col_tipo_1 = default_cols['Tipo de producto'] if default_cols['Tipo de producto'] in df1.columns else df1.columns[0]
+    col_cantidad_1 = default_cols['Cantidad'] if default_cols['Cantidad'] in df1.columns else df1.columns[0]
+    col_precio_1 = default_cols['Importe'] if default_cols['Importe'] in df1.columns else df1.columns[0]
+    col_sales_rep_1 = default_cols['SalesRepresentative'] if default_cols['SalesRepresentative'] in df1.columns else df1.columns[0]
+    col_set_1 = default_cols['Set'] if default_cols['Set'] in df1.columns else df1.columns[0]
+    col_productline_1 = default_cols['Productline'] if default_cols['Productline'] in df1.columns else df1.columns[0]
+    
+    col_fecha_2 = default_cols['Fecha'] if default_cols['Fecha'] in df2.columns else df2.columns[0]
+    col_cliente_2 = default_cols['Cliente'] if default_cols['Cliente'] in df2.columns else df2.columns[0]
+    col_producto_2 = default_cols['Producto'] if default_cols['Producto'] in df2.columns else df2.columns[0]
+    col_tipo_2 = default_cols['Tipo de producto'] if default_cols['Tipo de producto'] in df2.columns else df2.columns[0]
+    col_cantidad_2 = default_cols['Cantidad'] if default_cols['Cantidad'] in df2.columns else df2.columns[0]
+    col_precio_2 = default_cols['Importe'] if default_cols['Importe'] in df2.columns else df2.columns[0]
+    col_sales_rep_2 = default_cols['SalesRepresentative'] if default_cols['SalesRepresentative'] in df2.columns else df2.columns[0]
+    col_set_2 = default_cols['Set'] if default_cols['Set'] in df2.columns else df2.columns[0]
+    col_productline_2 = default_cols['Productline'] if default_cols['Productline'] in df2.columns else df2.columns[0]
+    
+    st.success(f"✅ Columnas detectadas automáticamente. Si tus archivos usan nombres diferentes, contacta al administrador.")
+    
+    with st.expander("🔍 Ver columnas detectadas", expanded=False):
         col1, col2 = st.columns(2)
-        
         with col1:
-            st.markdown(f"**Columnas de {nombre_periodo_1}**")
-            col_fecha_1 = st.selectbox(
-                f"📅 Fecha", 
-                df1.columns, 
-                index=df1.columns.get_loc(default_cols['Fecha']) if default_cols['Fecha'] in df1.columns else 0,
-                key="fecha_1"
-            )
-            col_cliente_1 = st.selectbox(
-                f"👤 Cliente", 
-                df1.columns, 
-                index=df1.columns.get_loc(default_cols['Cliente']) if default_cols['Cliente'] in df1.columns else 0,
-                key="cliente_1"
-            )
-            col_producto_1 = st.selectbox(
-                f"📦 Producto", 
-                df1.columns, 
-                index=df1.columns.get_loc(default_cols['Producto']) if default_cols['Producto'] in df1.columns else 0,
-                key="producto_1"
-            )
-            col_tipo_1 = st.selectbox(
-                f"🏷️ Tipo de producto", 
-                df1.columns, 
-                index=df1.columns.get_loc(default_cols['Tipo de producto']) if default_cols['Tipo de producto'] in df1.columns else 0,
-                key="tipo_1"
-            )
-            col_cantidad_1 = st.selectbox(
-                f"🔢 Cantidad", 
-                df1.columns, 
-                index=df1.columns.get_loc(default_cols['Cantidad']) if default_cols['Cantidad'] in df1.columns else 0,
-                key="cantidad_1"
-            )
-            col_precio_1 = st.selectbox(
-                f"💰 Importe", 
-                df1.columns, 
-                index=df1.columns.get_loc(default_cols['Importe']) if default_cols['Importe'] in df1.columns else 0,
-                key="precio_1"
-            )
-            col_sales_rep_1 = st.selectbox(
-                f"👔 SalesRepresentative", 
-                df1.columns, 
-                index=df1.columns.get_loc(default_cols['SalesRepresentative']) if default_cols['SalesRepresentative'] in df1.columns else 0,
-                key="sales_1"
-            )
-            col_set_1 = st.selectbox(
-                f"📊 Set", 
-                df1.columns, 
-                index=df1.columns.get_loc(default_cols['Set']) if default_cols['Set'] in df1.columns else 0,
-                key="set_1"
-            )
-            col_productline_1 = st.selectbox(
-                f"📈 Productline", 
-                df1.columns, 
-                index=df1.columns.get_loc(default_cols['Productline']) if default_cols['Productline'] in df1.columns else 0,
-                key="productline_1"
-            )
-        
+            st.markdown(f"**Columnas de {nombre_periodo_1}:**")
+            st.write(f"- Fecha: `{col_fecha_1}`")
+            st.write(f"- Cliente: `{col_cliente_1}`")
+            st.write(f"- Producto: `{col_producto_1}`")
+            st.write(f"- Tipo: `{col_tipo_1}`")
+            st.write(f"- Cantidad: `{col_cantidad_1}`")
+            st.write(f"- Importe: `{col_precio_1}`")
         with col2:
-            st.markdown(f"**Columnas de {nombre_periodo_2}**")
-            col_fecha_2 = st.selectbox(
-                f"📅 Fecha", 
-                df2.columns, 
-                index=df2.columns.get_loc(default_cols['Fecha']) if default_cols['Fecha'] in df2.columns else 0,
-                key="fecha_2"
-            )
-            col_cliente_2 = st.selectbox(
-                f"👤 Cliente", 
-                df2.columns, 
-                index=df2.columns.get_loc(default_cols['Cliente']) if default_cols['Cliente'] in df2.columns else 0,
-                key="cliente_2"
-            )
-            col_producto_2 = st.selectbox(
-                f"📦 Producto", 
-                df2.columns, 
-                index=df2.columns.get_loc(default_cols['Producto']) if default_cols['Producto'] in df2.columns else 0,
-                key="producto_2"
-            )
-            col_tipo_2 = st.selectbox(
-                f"🏷️ Tipo de producto", 
-                df2.columns, 
-                index=df2.columns.get_loc(default_cols['Tipo de producto']) if default_cols['Tipo de producto'] in df2.columns else 0,
-                key="tipo_2"
-            )
-            col_cantidad_2 = st.selectbox(
-                f"🔢 Cantidad", 
-                df2.columns, 
-                index=df2.columns.get_loc(default_cols['Cantidad']) if default_cols['Cantidad'] in df2.columns else 0,
-                key="cantidad_2"
-            )
-            col_precio_2 = st.selectbox(
-                f"💰 Importe", 
-                df2.columns, 
-                index=df2.columns.get_loc(default_cols['Importe']) if default_cols['Importe'] in df2.columns else 0,
-                key="precio_2"
-            )
-            col_sales_rep_2 = st.selectbox(
-                f"👔 SalesRepresentative", 
-                df2.columns, 
-                index=df2.columns.get_loc(default_cols['SalesRepresentative']) if default_cols['SalesRepresentative'] in df2.columns else 0,
-                key="sales_2"
-            )
-            col_set_2 = st.selectbox(
-                f"📊 Set", 
-                df2.columns, 
-                index=df2.columns.get_loc(default_cols['Set']) if default_cols['Set'] in df2.columns else 0,
-                key="set_2"
-            )
-            col_productline_2 = st.selectbox(
-                f"📈 Productline", 
-                df2.columns, 
-                index=df2.columns.get_loc(default_cols['Productline']) if default_cols['Productline'] in df2.columns else 0,
-                key="productline_2"
-            )
-    else:
-        # Usar valores por defecto si no se expande
-        col_fecha_1 = default_cols['Fecha'] if default_cols['Fecha'] in df1.columns else df1.columns[0]
-        col_cliente_1 = default_cols['Cliente'] if default_cols['Cliente'] in df1.columns else df1.columns[0]
-        col_producto_1 = default_cols['Producto'] if default_cols['Producto'] in df1.columns else df1.columns[0]
-        col_tipo_1 = default_cols['Tipo de producto'] if default_cols['Tipo de producto'] in df1.columns else df1.columns[0]
-        col_cantidad_1 = default_cols['Cantidad'] if default_cols['Cantidad'] in df1.columns else df1.columns[0]
-        col_precio_1 = default_cols['Importe'] if default_cols['Importe'] in df1.columns else df1.columns[0]
-        col_sales_rep_1 = default_cols['SalesRepresentative'] if default_cols['SalesRepresentative'] in df1.columns else df1.columns[0]
-        col_set_1 = default_cols['Set'] if default_cols['Set'] in df1.columns else df1.columns[0]
-        col_productline_1 = default_cols['Productline'] if default_cols['Productline'] in df1.columns else df1.columns[0]
-        
-        col_fecha_2 = default_cols['Fecha'] if default_cols['Fecha'] in df2.columns else df2.columns[0]
-        col_cliente_2 = default_cols['Cliente'] if default_cols['Cliente'] in df2.columns else df2.columns[0]
-        col_producto_2 = default_cols['Producto'] if default_cols['Producto'] in df2.columns else df2.columns[0]
-        col_tipo_2 = default_cols['Tipo de producto'] if default_cols['Tipo de producto'] in df2.columns else df2.columns[0]
-        col_cantidad_2 = default_cols['Cantidad'] if default_cols['Cantidad'] in df2.columns else df2.columns[0]
-        col_precio_2 = default_cols['Importe'] if default_cols['Importe'] in df2.columns else df2.columns[0]
-        col_sales_rep_2 = default_cols['SalesRepresentative'] if default_cols['SalesRepresentative'] in df2.columns else df2.columns[0]
-        col_set_2 = default_cols['Set'] if default_cols['Set'] in df2.columns else df2.columns[0]
-        col_productline_2 = default_cols['Productline'] if default_cols['Productline'] in df2.columns else df2.columns[0]
+            st.markdown(f"**Columnas de {nombre_periodo_2}:**")
+            st.write(f"- Fecha: `{col_fecha_2}`")
+            st.write(f"- Cliente: `{col_cliente_2}`")
+            st.write(f"- Producto: `{col_producto_2}`")
+            st.write(f"- Tipo: `{col_tipo_2}`")
+            st.write(f"- Cantidad: `{col_cantidad_2}`")
+            st.write(f"- Importe: `{col_precio_2}`")
     
     # =============================================================================
     # PASO 3: FILTROS

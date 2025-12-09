@@ -616,7 +616,7 @@ if file:
         use_container_width=True
     )
     
-    st.balloons()
+    
     st.success(f"🎉 **Analysis completed!** File ready to download: `{nombre_archivo}`")
 
 else:

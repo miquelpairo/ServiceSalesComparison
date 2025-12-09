@@ -390,6 +390,29 @@ if file:
     df2_filtrado = df2[df2[col_tipo].isin(tipos_seleccionados)].copy()
     
     st.success(f"✅ Filters applied: {len(df1_filtrado)} records in {nombre_periodo_1}, {len(df2_filtrado)} records in {nombre_periodo_2}")
+
+    # Filter by Product/Service Name
+    st.markdown("### 🔍 Filter by Product/Service Name (Optional)")
+
+    search_text = st.text_input(
+        "Search in ItemIdAndName (leave empty to include all)",
+        value="",
+        placeholder="e.g., 'pump', 'valve', 'maintenance'...",
+        help="Filter products/services that contain this text (case insensitive)"
+    )
+
+    if search_text:
+        # Apply filter
+        df1_filtrado = df1_filtrado[df1_filtrado[col_producto].str.contains(search_text, case=False, na=False)]
+        df2_filtrado = df2_filtrado[df2_filtrado[col_producto].str.contains(search_text, case=False, na=False)]
+        
+        st.success(f"✅ Name filter applied: {len(df1_filtrado)} records in {nombre_periodo_1}, {len(df2_filtrado)} records in {nombre_periodo_2}")
+        
+        if len(df1_filtrado) == 0 or len(df2_filtrado) == 0:
+            st.warning("⚠️ No records found with that search term. Try a different keyword.")
+            st.stop()
+    else:
+        st.info("ℹ️ No name filter applied - showing all products")
     
     # =============================================================================
     # DATA PROCESSING

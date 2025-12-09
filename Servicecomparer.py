@@ -244,7 +244,7 @@ if file:
         )
         
         # Toggle between calendar and manual input
-        use_calendar_p1 = st.checkbox("Use calendar picker", value=True, key="calendar_p1")
+        use_calendar_p1 = st.checkbox("Use calendar picker", value=False, key="calendar_p1")
         
         if use_calendar_p1:
             # Calendar picker
@@ -299,7 +299,7 @@ if file:
         )
         
         # Toggle between calendar and manual input
-        use_calendar_p2 = st.checkbox("Use calendar picker", value=True, key="calendar_p2")
+        use_calendar_p2 = st.checkbox("Use calendar picker", value=False, key="calendar_p2")
         
         if use_calendar_p2:
             # Calendar picker

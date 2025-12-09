@@ -47,20 +47,20 @@ st.markdown("""
 
 # Main title
 st.title("📊 Sales Comparison by Period")
-st.markdown("### Tool to analyze and compare sales between two periods")
+st.markdown("### Tool to analyze and compare sales between two periods from a single file")
 
 # Initial information and guide
 with st.expander("ℹ️ **HOW TO USE THIS APPLICATION** - Click here to see the guide", expanded=False):
     st.markdown("""
     ## 🎯 Purpose
-    This tool allows you to compare sales exported from **Power BI** between two different periods.
+    This tool allows you to compare sales between two different periods from a **single file** exported from Power BI.
     
     ## 📋 Steps to follow:
     
-    ### **STEP 1:** Prepare your files
+    ### **STEP 1:** Prepare your file
     - Export sales data from Power BI in **Excel (.xlsx)** or **CSV (.csv)** format
-    - You need **TWO files**: one for each period you want to compare
-    - Make sure they include these columns:
+    - Include data covering **both periods** you want to compare
+    - Make sure it includes these columns:
       - `Date` - Transaction date
       - `Business Partner Name` - Customer name
       - `ItemIdAndName` - Product or service
@@ -70,16 +70,15 @@ with st.expander("ℹ️ **HOW TO USE THIS APPLICATION** - Click here to see the
       - `SalesRepresentative` - Sales representative
       - `Set` and `Productline` - Groupings
     
-    ### **STEP 2:** Upload files (section below)
-    - Name each period (e.g., "Q1 2024", "January 2024")
-    - Upload the file for each period
+    ### **STEP 2:** Upload the file
+    - Upload your consolidated sales file
     
-    ### **STEP 3:** Verify columns
-    - The app automatically detects standard columns
-    - If your columns have different names, adjust them manually
+    ### **STEP 3:** Define periods
+    - Select the date range for **Period 1**
+    - Select the date range for **Period 2**
+    - You can use the calendar or type dates manually (YYYY-MM-DD format)
     
     ### **STEP 4:** Apply filters
-    - Select the date range you want to analyze
     - Choose which product types to include
     
     ### **STEP 5:** Download results
@@ -118,52 +117,34 @@ def load_file(file):
             return None
     return None
 
+# Function to parse manual date input
+def parse_date_input(date_str):
+    """Parse date string in format YYYY-MM-DD"""
+    try:
+        return datetime.strptime(date_str, "%Y-%m-%d").date()
+    except:
+        return None
+
 # =============================================================================
 # STEP 1: FILE UPLOAD
 # =============================================================================
 st.markdown("## 📁 STEP 1: File Upload")
-st.markdown("Upload the two sales files exported from Power BI")
+st.markdown("Upload your sales file exported from Power BI (should contain data for both periods)")
 
-col1, col2 = st.columns(2)
-
-with col1:
-    st.markdown("### 📅 Period 1")
-    nombre_periodo_1 = st.text_input(
-        "Name of period 1 (e.g., 'Q1 2024', 'January 2024')", 
-        value="Period 1", 
-        key="nombre_p1",
-        help="Give it a descriptive name to identify it easily"
-    )
-    file1 = st.file_uploader(
-        f"Sales file - {nombre_periodo_1}", 
-        type=["xlsx", "csv"], 
-        key="file1",
-        help="Export from Power BI: Data → Export data → .xlsx or .csv"
-    )
-    
-with col2:
-    st.markdown("### 📅 Period 2")
-    nombre_periodo_2 = st.text_input(
-        "Name of period 2 (e.g., 'Q1 2023', 'January 2023')", 
-        value="Period 2", 
-        key="nombre_p2",
-        help="Give it a descriptive name to identify it easily"
-    )
-    file2 = st.file_uploader(
-        f"Sales file - {nombre_periodo_2}", 
-        type=["xlsx", "csv"], 
-        key="file2",
-        help="Export from Power BI: Data → Export data → .xlsx or .csv"
-    )
+file = st.file_uploader(
+    "Sales file (Excel or CSV)", 
+    type=["xlsx", "csv"], 
+    key="main_file",
+    help="Export from Power BI: Data → Export data → .xlsx or .csv"
+)
 
 # Processing and comparison
-if file1 and file2:
-    st.success("✅ **Files loaded successfully**")
+if file:
+    st.success("✅ **File loaded successfully**")
     
-    df1 = load_file(file1)
-    df2 = load_file(file2)
+    df = load_file(file)
     
-    if df1 is None or df2 is None:
+    if df is None:
         st.stop()
     
     # =============================================================================
@@ -171,24 +152,18 @@ if file1 and file2:
     # =============================================================================
     st.markdown("---")
     st.markdown("### 👀 Data Preview")
-    st.info("🔍 Verify that data has been loaded correctly before continuing")
+    st.info(f"🔍 Loaded {len(df)} records. Verify that the data is correct before continuing")
     
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown(f"**{nombre_periodo_1}** ({len(df1)} records)")
-        st.dataframe(df1.head(5), use_container_width=True)
-    with col2:
-        st.markdown(f"**{nombre_periodo_2}** ({len(df2)} records)")
-        st.dataframe(df2.head(5), use_container_width=True)
+    st.dataframe(df.head(10), use_container_width=True)
     
     # =============================================================================
     # STEP 2: COLUMN ASSIGNMENT
     # =============================================================================
     st.markdown("---")
     st.markdown("## 🛠️ STEP 2: Column Assignment")
-    st.markdown("The application automatically detects columns. **Only adjust if necessary.**")
+    st.markdown("The application detects columns automatically. **Only adjust if necessary.**")
     
-    # Assign fixed column names with customization option
+    # Assign fixed column names
     default_cols = {
         'Date': 'Date',
         'Customer': 'Business Partner Name',
@@ -201,90 +176,189 @@ if file1 and file2:
         'Productline': 'Productline'
     }
     
-    # Always use default values (without expander to simplify)
-    col_fecha_1 = default_cols['Date'] if default_cols['Date'] in df1.columns else df1.columns[0]
-    col_cliente_1 = default_cols['Customer'] if default_cols['Customer'] in df1.columns else df1.columns[0]
-    col_producto_1 = default_cols['Product'] if default_cols['Product'] in df1.columns else df1.columns[0]
-    col_tipo_1 = default_cols['Product Type'] if default_cols['Product Type'] in df1.columns else df1.columns[0]
-    col_cantidad_1 = default_cols['Quantity'] if default_cols['Quantity'] in df1.columns else df1.columns[0]
-    col_precio_1 = default_cols['Amount'] if default_cols['Amount'] in df1.columns else df1.columns[0]
-    col_sales_rep_1 = default_cols['SalesRepresentative'] if default_cols['SalesRepresentative'] in df1.columns else df1.columns[0]
-    col_set_1 = default_cols['Set'] if default_cols['Set'] in df1.columns else df1.columns[0]
-    col_productline_1 = default_cols['Productline'] if default_cols['Productline'] in df1.columns else df1.columns[0]
+    # Detect columns
+    col_fecha = default_cols['Date'] if default_cols['Date'] in df.columns else df.columns[0]
+    col_cliente = default_cols['Customer'] if default_cols['Customer'] in df.columns else df.columns[0]
+    col_producto = default_cols['Product'] if default_cols['Product'] in df.columns else df.columns[0]
+    col_tipo = default_cols['Product Type'] if default_cols['Product Type'] in df.columns else df.columns[0]
+    col_cantidad = default_cols['Quantity'] if default_cols['Quantity'] in df.columns else df.columns[0]
+    col_precio = default_cols['Amount'] if default_cols['Amount'] in df.columns else df.columns[0]
+    col_sales_rep = default_cols['SalesRepresentative'] if default_cols['SalesRepresentative'] in df.columns else df.columns[0]
+    col_set = default_cols['Set'] if default_cols['Set'] in df.columns else df.columns[0]
+    col_productline = default_cols['Productline'] if default_cols['Productline'] in df.columns else df.columns[0]
     
-    col_fecha_2 = default_cols['Date'] if default_cols['Date'] in df2.columns else df2.columns[0]
-    col_cliente_2 = default_cols['Customer'] if default_cols['Customer'] in df2.columns else df2.columns[0]
-    col_producto_2 = default_cols['Product'] if default_cols['Product'] in df2.columns else df2.columns[0]
-    col_tipo_2 = default_cols['Product Type'] if default_cols['Product Type'] in df2.columns else df2.columns[0]
-    col_cantidad_2 = default_cols['Quantity'] if default_cols['Quantity'] in df2.columns else df2.columns[0]
-    col_precio_2 = default_cols['Amount'] if default_cols['Amount'] in df2.columns else df2.columns[0]
-    col_sales_rep_2 = default_cols['SalesRepresentative'] if default_cols['SalesRepresentative'] in df2.columns else df2.columns[0]
-    col_set_2 = default_cols['Set'] if default_cols['Set'] in df2.columns else df2.columns[0]
-    col_productline_2 = default_cols['Productline'] if default_cols['Productline'] in df2.columns else df2.columns[0]
-    
-    st.success(f"✅ Columns detected automatically. If your files use different names, contact the administrator.")
+    st.success(f"✅ Columns detected automatically.")
     
     with st.expander("🔍 View detected columns", expanded=False):
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown(f"**Columns from {nombre_periodo_1}:**")
-            st.write(f"- Date: `{col_fecha_1}`")
-            st.write(f"- Customer: `{col_cliente_1}`")
-            st.write(f"- Product: `{col_producto_1}`")
-            st.write(f"- Type: `{col_tipo_1}`")
-            st.write(f"- Quantity: `{col_cantidad_1}`")
-            st.write(f"- Amount: `{col_precio_1}`")
-        with col2:
-            st.markdown(f"**Columns from {nombre_periodo_2}:**")
-            st.write(f"- Date: `{col_fecha_2}`")
-            st.write(f"- Customer: `{col_cliente_2}`")
-            st.write(f"- Product: `{col_producto_2}`")
-            st.write(f"- Type: `{col_tipo_2}`")
-            st.write(f"- Quantity: `{col_cantidad_2}`")
-            st.write(f"- Amount: `{col_precio_2}`")
+        st.markdown("**Detected columns:**")
+        st.write(f"- Date: `{col_fecha}`")
+        st.write(f"- Customer: `{col_cliente}`")
+        st.write(f"- Product: `{col_producto}`")
+        st.write(f"- Type: `{col_tipo}`")
+        st.write(f"- Quantity: `{col_cantidad}`")
+        st.write(f"- Amount: `{col_precio}`")
+        st.write(f"- Sales Rep: `{col_sales_rep}`")
+        st.write(f"- Set: `{col_set}`")
+        st.write(f"- Productline: `{col_productline}`")
+    
+    # Format dates
+    df[col_fecha] = pd.to_datetime(df[col_fecha], errors='coerce').dt.date
+    
+    # Get date range from data
+    min_date = pd.to_datetime(df[col_fecha]).min()
+    max_date = pd.to_datetime(df[col_fecha]).max()
     
     # =============================================================================
-    # STEP 3: FILTERS
+    # STEP 3: PERIOD DEFINITION
     # =============================================================================
     st.markdown("---")
-    st.markdown("## 🎯 STEP 3: Apply Filters")
-    
-    # Date filter
-    st.markdown("### 📅 Date Range Filter")
-    st.info("💡 **Tip:** You can compare the same month from different years, or custom periods")
-    
-    # Format dates to remove time (00:00:00)
-    df1[col_fecha_1] = pd.to_datetime(df1[col_fecha_1], errors='coerce').dt.date
-    df2[col_fecha_2] = pd.to_datetime(df2[col_fecha_2], errors='coerce').dt.date
-    
-    min_date_1, max_date_1 = pd.to_datetime(df1[col_fecha_1]).min(), pd.to_datetime(df1[col_fecha_1]).max()
-    min_date_2, max_date_2 = pd.to_datetime(df2[col_fecha_2]).min(), pd.to_datetime(df2[col_fecha_2]).max()
+    st.markdown("## 📅 STEP 3: Define Periods to Compare")
+    st.markdown(f"**Available date range in file:** {min_date.date()} to {max_date.date()}")
+    st.info("💡 **Tip:** You can use the calendar picker or type dates manually in YYYY-MM-DD format (e.g., 2024-01-01)")
     
     col1, col2 = st.columns(2)
+    
+    # ==================== PERIOD 1 ====================
     with col1:
-        st.markdown(f"**Available range in {nombre_periodo_1}:**")
-        st.caption(f"From {min_date_1.date()} to {max_date_1.date()}")
-        start_date_1, end_date_1 = st.date_input(
-            f"Select range for {nombre_periodo_1}", 
-            [min_date_1, max_date_1],
-            key="date_range_1"
+        st.markdown("### 📅 Period 1")
+        
+        nombre_periodo_1 = st.text_input(
+            "Name for Period 1 (e.g., 'Q1 2024', 'January 2024')", 
+            value="Period 1", 
+            key="nombre_p1",
+            help="Give it a descriptive name"
         )
+        
+        # Toggle between calendar and manual input
+        use_calendar_p1 = st.checkbox("Use calendar picker", value=True, key="calendar_p1")
+        
+        if use_calendar_p1:
+            # Calendar picker
+            date_range_1 = st.date_input(
+                f"Select date range for {nombre_periodo_1}", 
+                [min_date, min_date + pd.Timedelta(days=30)],
+                min_value=min_date,
+                max_value=max_date,
+                key="date_range_p1_cal"
+            )
+            if len(date_range_1) == 2:
+                start_date_1, end_date_1 = date_range_1
+            else:
+                start_date_1 = date_range_1[0]
+                end_date_1 = date_range_1[0]
+        else:
+            # Manual input
+            col_start, col_end = st.columns(2)
+            with col_start:
+                start_str_1 = st.text_input(
+                    "Start date (YYYY-MM-DD)",
+                    value=min_date.strftime("%Y-%m-%d"),
+                    key="start_manual_p1"
+                )
+                start_date_1 = parse_date_input(start_str_1)
+                if start_date_1 is None:
+                    st.error("Invalid date format. Use YYYY-MM-DD")
+                    st.stop()
+            
+            with col_end:
+                end_str_1 = st.text_input(
+                    "End date (YYYY-MM-DD)",
+                    value=(min_date + pd.Timedelta(days=30)).strftime("%Y-%m-%d"),
+                    key="end_manual_p1"
+                )
+                end_date_1 = parse_date_input(end_str_1)
+                if end_date_1 is None:
+                    st.error("Invalid date format. Use YYYY-MM-DD")
+                    st.stop()
+        
+        st.caption(f"Selected: {start_date_1} to {end_date_1}")
     
+    # ==================== PERIOD 2 ====================
     with col2:
-        st.markdown(f"**Available range in {nombre_periodo_2}:**")
-        st.caption(f"From {min_date_2.date()} to {max_date_2.date()}")
-        start_date_2, end_date_2 = st.date_input(
-            f"Select range for {nombre_periodo_2}", 
-            [min_date_2, max_date_2],
-            key="date_range_2"
+        st.markdown("### 📅 Period 2")
+        
+        nombre_periodo_2 = st.text_input(
+            "Name for Period 2 (e.g., 'Q1 2023', 'January 2023')", 
+            value="Period 2", 
+            key="nombre_p2",
+            help="Give it a descriptive name"
         )
+        
+        # Toggle between calendar and manual input
+        use_calendar_p2 = st.checkbox("Use calendar picker", value=True, key="calendar_p2")
+        
+        if use_calendar_p2:
+            # Calendar picker
+            date_range_2 = st.date_input(
+                f"Select date range for {nombre_periodo_2}", 
+                [max_date - pd.Timedelta(days=30), max_date],
+                min_value=min_date,
+                max_value=max_date,
+                key="date_range_p2_cal"
+            )
+            if len(date_range_2) == 2:
+                start_date_2, end_date_2 = date_range_2
+            else:
+                start_date_2 = date_range_2[0]
+                end_date_2 = date_range_2[0]
+        else:
+            # Manual input
+            col_start, col_end = st.columns(2)
+            with col_start:
+                start_str_2 = st.text_input(
+                    "Start date (YYYY-MM-DD)",
+                    value=(max_date - pd.Timedelta(days=30)).strftime("%Y-%m-%d"),
+                    key="start_manual_p2"
+                )
+                start_date_2 = parse_date_input(start_str_2)
+                if start_date_2 is None:
+                    st.error("Invalid date format. Use YYYY-MM-DD")
+                    st.stop()
+            
+            with col_end:
+                end_str_2 = st.text_input(
+                    "End date (YYYY-MM-DD)",
+                    value=max_date.strftime("%Y-%m-%d"),
+                    key="end_manual_p2"
+                )
+                end_date_2 = parse_date_input(end_str_2)
+                if end_date_2 is None:
+                    st.error("Invalid date format. Use YYYY-MM-DD")
+                    st.stop()
+        
+        st.caption(f"Selected: {start_date_2} to {end_date_2}")
     
-    df1 = df1[(pd.to_datetime(df1[col_fecha_1]) >= pd.to_datetime(start_date_1)) & (pd.to_datetime(df1[col_fecha_1]) <= pd.to_datetime(end_date_1))]
-    df2 = df2[(pd.to_datetime(df2[col_fecha_2]) >= pd.to_datetime(start_date_2)) & (pd.to_datetime(df2[col_fecha_2]) <= pd.to_datetime(end_date_2))]
+    # Validate date ranges
+    if start_date_1 > end_date_1:
+        st.error(f"❌ Period 1: Start date must be before end date")
+        st.stop()
+    
+    if start_date_2 > end_date_2:
+        st.error(f"❌ Period 2: Start date must be before end date")
+        st.stop()
+    
+    # Filter data by periods
+    df1 = df[(pd.to_datetime(df[col_fecha]) >= pd.to_datetime(start_date_1)) & 
+             (pd.to_datetime(df[col_fecha]) <= pd.to_datetime(end_date_1))].copy()
+    
+    df2 = df[(pd.to_datetime(df[col_fecha]) >= pd.to_datetime(start_date_2)) & 
+             (pd.to_datetime(df[col_fecha]) <= pd.to_datetime(end_date_2))].copy()
+    
+    st.success(f"✅ **Periods defined:** {len(df1)} records in {nombre_periodo_1}, {len(df2)} records in {nombre_periodo_2}")
+    
+    # Warning if periods overlap
+    if not (end_date_1 < start_date_2 or end_date_2 < start_date_1):
+        st.warning("⚠️ **Warning:** The selected periods overlap. This may affect the comparison results.")
+    
+    # =============================================================================
+    # STEP 4: FILTERS
+    # =============================================================================
+    st.markdown("---")
+    st.markdown("## 🎯 STEP 4: Apply Filters")
     
     # Product type filter
     st.markdown("### 🏷️ Product Type Filter")
-    tipos_disponibles = sorted(set(df1[col_tipo_1].dropna().unique()) | set(df2[col_tipo_2].dropna().unique()))
+    tipos_disponibles = sorted(set(df1[col_tipo].dropna().unique()) | set(df2[col_tipo].dropna().unique()))
     
     st.info(f"💡 **Available types:** {', '.join(tipos_disponibles)}")
     tipos_seleccionados = st.multiselect(
@@ -298,8 +372,8 @@ if file1 and file2:
         st.warning("⚠️ You must select at least one product type")
         st.stop()
     
-    df1_filtrado = df1[df1[col_tipo_1].isin(tipos_seleccionados)].copy()
-    df2_filtrado = df2[df2[col_tipo_2].isin(tipos_seleccionados)].copy()
+    df1_filtrado = df1[df1[col_tipo].isin(tipos_seleccionados)].copy()
+    df2_filtrado = df2[df2[col_tipo].isin(tipos_seleccionados)].copy()
     
     st.success(f"✅ Filters applied: {len(df1_filtrado)} records in {nombre_periodo_1}, {len(df2_filtrado)} records in {nombre_periodo_2}")
     
@@ -308,36 +382,36 @@ if file1 and file2:
     # =============================================================================
     
     # Convert quantity and amount to numeric
-    df1_filtrado[col_cantidad_1] = pd.to_numeric(df1_filtrado[col_cantidad_1], errors='coerce')
-    df1_filtrado[col_precio_1] = pd.to_numeric(df1_filtrado[col_precio_1], errors='coerce')
-    df2_filtrado[col_cantidad_2] = pd.to_numeric(df2_filtrado[col_cantidad_2], errors='coerce')
-    df2_filtrado[col_precio_2] = pd.to_numeric(df2_filtrado[col_precio_2], errors='coerce')
+    df1_filtrado[col_cantidad] = pd.to_numeric(df1_filtrado[col_cantidad], errors='coerce')
+    df1_filtrado[col_precio] = pd.to_numeric(df1_filtrado[col_precio], errors='coerce')
+    df2_filtrado[col_cantidad] = pd.to_numeric(df2_filtrado[col_cantidad], errors='coerce')
+    df2_filtrado[col_precio] = pd.to_numeric(df2_filtrado[col_precio], errors='coerce')
     
     # Amount is already the total
-    df1_filtrado["Amount"] = df1_filtrado[col_precio_1]
-    df2_filtrado["Amount"] = df2_filtrado[col_precio_2]
+    df1_filtrado["Amount"] = df1_filtrado[col_precio]
+    df2_filtrado["Amount"] = df2_filtrado[col_precio]
     
     # Group by customer, product, sales representative, set and productline
     with st.spinner("🔄 Processing data and generating comparison..."):
-        grouped_1 = df1_filtrado.groupby([col_cliente_1, col_producto_1, col_sales_rep_1, col_set_1, col_productline_1, col_tipo_1]).agg({
-            col_cantidad_1: "sum",
+        grouped_1 = df1_filtrado.groupby([col_cliente, col_producto, col_sales_rep, col_set, col_productline, col_tipo]).agg({
+            col_cantidad: "sum",
             "Amount": "sum"
-        }).rename(columns={col_cantidad_1: f"Quantity {nombre_periodo_1}", "Amount": f"Amount {nombre_periodo_1}"})
+        }).rename(columns={col_cantidad: f"Quantity {nombre_periodo_1}", "Amount": f"Amount {nombre_periodo_1}"})
         
-        grouped_2 = df2_filtrado.groupby([col_cliente_2, col_producto_2, col_sales_rep_2, col_set_2, col_productline_2, col_tipo_2]).agg({
-            col_cantidad_2: "sum",
+        grouped_2 = df2_filtrado.groupby([col_cliente, col_producto, col_sales_rep, col_set, col_productline, col_tipo]).agg({
+            col_cantidad: "sum",
             "Amount": "sum"
-        }).rename(columns={col_cantidad_2: f"Quantity {nombre_periodo_2}", "Amount": f"Amount {nombre_periodo_2}"})
+        }).rename(columns={col_cantidad: f"Quantity {nombre_periodo_2}", "Amount": f"Amount {nombre_periodo_2}"})
         
         comparativa = pd.merge(grouped_1, grouped_2, how="outer", left_index=True, right_index=True).fillna(0)
         comparativa["Quantity Difference"] = comparativa[f"Quantity {nombre_periodo_2}"] - comparativa[f"Quantity {nombre_periodo_1}"]
         comparativa["Amount Difference"] = comparativa[f"Amount {nombre_periodo_2}"] - comparativa[f"Amount {nombre_periodo_1}"]
     
     # =============================================================================
-    # STEP 4: RESULTS AND METRICS
+    # STEP 5: RESULTS AND METRICS
     # =============================================================================
     st.markdown("---")
-    st.markdown("## 📊 STEP 4: Analysis Results")
+    st.markdown("## 📊 STEP 5: Analysis Results")
     
     # Show comparison summary
     st.markdown("### 💰 Financial Summary")
@@ -436,10 +510,10 @@ if file1 and file2:
     )
     
     # =============================================================================
-    # STEP 5: DOWNLOAD
+    # STEP 6: DOWNLOAD
     # =============================================================================
     st.markdown("---")
-    st.markdown("## 📥 STEP 5: Download Results")
+    st.markdown("## 📥 STEP 6: Download Results")
     
     st.info("🔧 Generating Excel file with all analysis sheets...")
     
@@ -463,8 +537,8 @@ if file1 and file2:
         datos_originales.to_excel(writer, index=False, sheet_name='Original Data')
         
         # Unique services in each period and common ones
-        keys_1 = set(df1_filtrado[[col_cliente_1, col_producto_1, col_sales_rep_1, col_set_1, col_productline_1, col_tipo_1]].apply(tuple, axis=1))
-        keys_2 = set(df2_filtrado[[col_cliente_2, col_producto_2, col_sales_rep_2, col_set_2, col_productline_2, col_tipo_2]].apply(tuple, axis=1))
+        keys_1 = set(df1_filtrado[[col_cliente, col_producto, col_sales_rep, col_set, col_productline, col_tipo]].apply(tuple, axis=1))
+        keys_2 = set(df2_filtrado[[col_cliente, col_producto, col_sales_rep, col_set, col_productline, col_tipo]].apply(tuple, axis=1))
         
         unicos_1 = keys_1 - keys_2
         unicos_2 = keys_2 - keys_1
@@ -472,16 +546,16 @@ if file1 and file2:
         
         # DataFrames of unique and common
         if unicos_1:
-            df_unicos_1 = df1_filtrado[df1_filtrado[[col_cliente_1, col_producto_1, col_sales_rep_1, col_set_1, col_productline_1, col_tipo_1]].apply(tuple, axis=1).isin(unicos_1)]
+            df_unicos_1 = df1_filtrado[df1_filtrado[[col_cliente, col_producto, col_sales_rep, col_set, col_productline, col_tipo]].apply(tuple, axis=1).isin(unicos_1)]
             df_unicos_1.to_excel(writer, index=False, sheet_name=f'Only in {nombre_periodo_1}'[:31])
         
         if unicos_2:
-            df_unicos_2 = df2_filtrado[df2_filtrado[[col_cliente_2, col_producto_2, col_sales_rep_2, col_set_2, col_productline_2, col_tipo_2]].apply(tuple, axis=1).isin(unicos_2)]
+            df_unicos_2 = df2_filtrado[df2_filtrado[[col_cliente, col_producto, col_sales_rep, col_set, col_productline, col_tipo]].apply(tuple, axis=1).isin(unicos_2)]
             df_unicos_2.to_excel(writer, index=False, sheet_name=f'Only in {nombre_periodo_2}'[:31])
         
         if comunes:
-            df_comunes_1 = df1_filtrado[df1_filtrado[[col_cliente_1, col_producto_1, col_sales_rep_1, col_set_1, col_productline_1, col_tipo_1]].apply(tuple, axis=1).isin(comunes)].copy()
-            df_comunes_2 = df2_filtrado[df2_filtrado[[col_cliente_2, col_producto_2, col_sales_rep_2, col_set_2, col_productline_2, col_tipo_2]].apply(tuple, axis=1).isin(comunes)].copy()
+            df_comunes_1 = df1_filtrado[df1_filtrado[[col_cliente, col_producto, col_sales_rep, col_set, col_productline, col_tipo]].apply(tuple, axis=1).isin(comunes)].copy()
+            df_comunes_2 = df2_filtrado[df2_filtrado[[col_cliente, col_producto, col_sales_rep, col_set, col_productline, col_tipo]].apply(tuple, axis=1).isin(comunes)].copy()
             
             df_comunes_1['Period'] = nombre_periodo_1
             df_comunes_2['Period'] = nombre_periodo_2
@@ -532,14 +606,14 @@ if file1 and file2:
     st.success(f"🎉 **Analysis completed!** File ready to download: `{nombre_archivo}`")
 
 else:
-    # Message when no files are loaded
-    st.info("👆 **Start by uploading the two sales files in the section above**")
+    # Message when no file is loaded
+    st.info("👆 **Start by uploading your sales file in the section above**")
     
     st.markdown("""
     ### 📌 Reminder:
     1. Export your data from **Power BI** in Excel (.xlsx) or CSV (.csv) format
-    2. You need **TWO files**: one for each period
-    3. Make sure they include standard Power BI columns
+    2. Make sure the file includes data for **both periods** you want to compare
+    3. Include standard Power BI columns (Date, Business Partner Name, ItemIdAndName, etc.)
     
     Need help? Open the complete guide at the top of the page.
     """)

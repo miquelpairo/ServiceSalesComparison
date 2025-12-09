@@ -58,7 +58,21 @@ with st.expander("ℹ️ **HOW TO USE THIS APPLICATION** - Click here to see the
     ## 📋 Steps to follow:
     
     ### **STEP 1:** Prepare your file
-    - Export sales data from Power BI in **Excel (.xlsx)** or **CSV (.csv)** format
+ - Export sales data from Power BI in **Excel (.xlsx)** or **CSV (.csv)** format
+
+**📌 How to export from Power BI:**
+1. Open your sales report in Power BI
+2. Apply filter on **ProductType** column
+3. Select ONLY these product types:
+   - ✅ Cost Item (Service)
+   - ✅ Service Contract
+   - ✅ Spare Part (Service)
+   - ✅ Training
+   - ✅ Wear Part (Service)
+4. Click on the visual/table → **More options (...)** → **Export data**
+5. Choose Excel (.xlsx) or CSV format
+6. Save the file
+
     - Include data covering **both periods** you want to compare
     - Make sure it includes these columns:
       - `Date` - Transaction date
@@ -66,7 +80,7 @@ with st.expander("ℹ️ **HOW TO USE THIS APPLICATION** - Click here to see the
       - `ItemIdAndName` - Product or service
       - `ProductType` - Product type
       - `Qty` - Quantity sold
-      - `EUR` - Amount in euros
+      - `EUR` - Amount in local currency
       - `SalesRepresentative` - Sales representative
       - `Set` and `Productline` - Groupings
     

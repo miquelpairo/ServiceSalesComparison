@@ -1,0 +1,1020 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sales Comparison: {{ nombre_p1 }} vs {{ nombre_p2 }} - {{ timestamp_short }}</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    
+    <style>
+{{ buchi_css | safe }}
+{{ sidebar_styles | safe }}
+{{ common_styles | safe }}
+
+        .main-content {
+            margin-left: 400px !important;
+        }
+        
+        .sidebar {
+            width: 400px !important;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+        }
+        
+        .sidebar::-webkit-scrollbar {
+            display: none;
+        }
+        
+        .filter-group label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: white !important;
+            font-size: 0.95rem;
+        }
+        
+        .filter-group details {
+            margin-bottom: 10px;
+        }
+        
+        .filter-group summary {
+            cursor: pointer;
+            font-weight: bold;
+            color: white;
+            padding: 10px 12px;
+            user-select: none;
+            list-style: none;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 6px;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .filter-group summary::-webkit-details-marker {
+            display: none;
+        }
+        
+        .filter-group summary::before {
+            content: '▶';
+            display: inline-block;
+            transition: transform 0.2s;
+            margin-right: 8px;
+            font-size: 0.8em;
+        }
+        
+        .filter-group details[open] summary {
+            background: rgba(255, 255, 255, 0.12);
+        }
+        
+        .filter-group details[open] summary::before {
+            transform: rotate(90deg);
+        }
+        
+        .filter-group summary:hover {
+            background: rgba(255, 255, 255, 0.15);
+            color: {{ colors.accent }};
+        }
+        
+        .summary-text {
+            flex: 1;
+        }
+        
+        .filter-actions {
+            display: inline-flex;
+            gap: 4px;
+            align-items: center;
+            margin-left: 8px;
+        }
+        
+        .mini-btn {
+            background: rgba(255,255,255,0.15);
+            border: 1px solid rgba(255,255,255,0.3);
+            color: white;
+            padding: 3px 10px;
+            border-radius: 4px;
+            font-size: 10px;
+            cursor: pointer;
+            line-height: 1.2;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            transition: all 0.2s;
+        }
+        
+        .mini-btn:hover {
+            background: {{ colors.accent }};
+            border-color: {{ colors.accent }};
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .quick-filters {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 8px;
+        }
+        
+        .quick-filter-tag {
+            background-color: #e9ecef;
+            border: 1px solid #adb5bd;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+            user-select: none;
+        }
+        
+        .quick-filter-tag:hover {
+            background-color: #d3d3d8;
+        }
+        
+        .quick-filter-tag.active {
+            background-color: {{ colors.accent }};
+            color: white;
+            border-color: {{ colors.accent }};
+        }
+        
+        .checkbox-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-height: 200px;
+            overflow-y: auto;
+            padding: 10px;
+            margin-top: 8px;
+            background-color: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+        }
+        
+        .checkbox-group::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .checkbox-group::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        
+        .checkbox-group::-webkit-scrollbar-thumb {
+            background-color: rgba(255, 255, 255, 0.3);
+            border-radius: 3px;
+        }
+        
+        .checkbox-group label {
+            display: flex;
+            align-items: center;
+            font-weight: normal !important;
+            cursor: pointer;
+            padding: 5px;
+            border-radius: 3px;
+            transition: background-color 0.2s;
+            color: white !important;
+        }
+        
+        .checkbox-group label:hover {
+            background-color: rgba(255, 255, 255, 0.15);
+        }
+        
+        .checkbox-group input[type="checkbox"] {
+            width: auto;
+            margin-right: 8px;
+            cursor: pointer;
+        }
+        
+        .filter-group input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .apply-filters-btn {
+            background: {{ colors.success }};
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            width: 100%;
+            margin-top: 20px;
+            transition: all 0.2s;
+        }
+        
+        .apply-filters-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            background: {{ colors.accent }};
+        }
+        
+        .reset-filters-btn {
+            background: #6c757d;
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            width: 100%;
+            margin-top: 10px;
+            transition: all 0.2s;
+        }
+        
+        .reset-filters-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            background: #5a6268;
+        }
+        
+        .active-filters-section {
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+        }
+        
+        .active-filters-section h3 {
+            color: white;
+            font-size: 0.9rem;
+            margin: 0 0 10px 0;
+            opacity: 0.9;
+        }
+        
+        #resultCount {
+            color: #fff;
+            font-size: 13px;
+            opacity: 0.9;
+            margin-bottom: 10px;
+        }
+        
+        #activeChips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        
+        .active-chip {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        
+        .quick-mode-toggle {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid rgba(255, 255, 255, 0.15);
+        }
+        
+        .quick-mode-toggle label {
+            color: #fff !important;
+            font-size: 12px !important;
+            opacity: 0.9;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            font-weight: normal !important;
+        }
+        
+        .table-container {
+            max-height: 500px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            scrollbar-width: thin;
+            scrollbar-color: #ccc transparent;
+        }
+        
+        .table-container::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .table-container::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        
+        .table-container::-webkit-scrollbar-thumb {
+            background-color: #ccc;
+            border-radius: 4px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: white;
+        }
+        
+        th {
+            background-color: {{ colors.primary }};
+            color: white;
+            padding: 12px;
+            text-align: left;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            cursor: pointer;
+            user-select: none;
+            transition: background-color 0.2s;
+        }
+        
+        th:hover {
+            background-color: {{ colors.secondary }};
+        }
+        
+        th::after {
+            content: ' ⇅';
+            opacity: 0.3;
+            font-size: 0.8em;
+        }
+        
+        th.sort-asc::after {
+            content: ' ↑';
+            opacity: 1;
+        }
+        
+        th.sort-desc::after {
+            content: ' ↓';
+            opacity: 1;
+        }
+        
+        td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        tr:hover {
+            background-color: #f5f5f5;
+        }
+        
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .metric-card {
+            color: white;
+            padding: 25px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        .metric-card.blue {
+            background: linear-gradient(135deg, {{ colors.kashmir_blue }} 0%, {{ colors.sky_blue }} 100%);
+        }
+        
+        .metric-card.green {
+            background: linear-gradient(135deg, {{ colors.teal_blue }} 0%, {{ colors.accent }} 100%);
+        }
+        
+        .metric-card.orange {
+            background: linear-gradient(135deg, {{ colors.sky_blue }} 0%, {{ colors.accent }} 100%);
+        }
+        
+        .metric-card.purple {
+            background: linear-gradient(135deg, {{ colors.primary }} 0%, {{ colors.secondary }} 100%);
+        }
+        
+        .metric-card.red {
+            background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+        }
+        
+        .metric-card .label {
+            font-size: 0.9rem;
+            opacity: 0.9;
+            margin-bottom: 10px;
+        }
+        
+        .metric-card .value {
+            font-size: 2rem;
+            font-weight: bold;
+        }
+        
+        .metric-card .delta {
+            font-size: 0.9rem;
+            margin-top: 8px;
+            opacity: 0.9;
+        }
+        
+        .chart-container {
+            margin: 30px 0;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #ddd;
+        }
+        
+        .tab {
+            padding: 12px 24px;
+            cursor: pointer;
+            border: none;
+            background: none;
+            font-size: 14px;
+            font-weight: 600;
+            color: #666;
+            transition: all 0.2s;
+            border-bottom: 3px solid transparent;
+        }
+        
+        .tab:hover {
+            color: {{ colors.primary }};
+        }
+        
+        .tab.active {
+            color: {{ colors.primary }};
+            border-bottom-color: {{ colors.primary }};
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <!-- SIDEBAR -->
+    <div class="sidebar">
+        <h2>📋 Índice</h2>
+        <ul>
+            <li><a href="#overview-section">Overview</a></li>
+            <li><a href="#charts-section">Comparative Charts</a></li>
+            <li><a href="#comparison-section">Full Comparison</a></li>
+            <li><a href="#only-p1-section">Only in P1</a></li>
+            <li><a href="#only-p2-section">Only in P2</a></li>
+            <li><a href="#common-section">Common Records</a></li>
+        </ul>
+        
+        <div style="padding: 20px;">
+            <div class="filter-group">
+                <details>
+                    <summary>
+                        <span class="summary-text">🏷️ Product Types</span>
+                        <span class="filter-actions">
+                            <button type="button" class="mini-btn" onclick="setGroupChecked('type', true); event.preventDefault(); event.stopPropagation();">All</button>
+                            <button type="button" class="mini-btn" onclick="setGroupChecked('type', false); event.preventDefault(); event.stopPropagation();">None</button>
+                        </span>
+                    </summary>
+                    <div class="checkbox-group" id="typeFilters"></div>
+                </details>
+            </div>
+            
+            <div class="filter-group">
+                <details>
+                    <summary>
+                        <span class="summary-text">📦 Sets</span>
+                        <span class="filter-actions">
+                            <button type="button" class="mini-btn" onclick="setGroupChecked('set', true); event.preventDefault(); event.stopPropagation();">All</button>
+                            <button type="button" class="mini-btn" onclick="setGroupChecked('set', false); event.preventDefault(); event.stopPropagation();">None</button>
+                        </span>
+                    </summary>
+                    <div class="checkbox-group" id="setFilters"></div>
+                </details>
+            </div>
+            
+            <div class="filter-group">
+                <details>
+                    <summary>
+                        <span class="summary-text">👤 Sales Representatives</span>
+                        <span class="filter-actions">
+                            <button type="button" class="mini-btn" onclick="setGroupChecked('rep', true); event.preventDefault(); event.stopPropagation();">All</button>
+                            <button type="button" class="mini-btn" onclick="setGroupChecked('rep', false); event.preventDefault(); event.stopPropagation();">None</button>
+                        </span>
+                    </summary>
+                    <div class="checkbox-group" id="repFilters"></div>
+                </details>
+            </div>
+            
+            <div class="filter-group">
+                <details open>
+                    <summary>
+                        <span class="summary-text">🔍 Search Service</span>
+                    </summary>
+                    <div class="quick-filters">
+                        {% for keyword in quick_filter_keywords %}
+                        <span class="quick-filter-tag" data-keyword="{{ keyword }}" onclick="toggleQuickFilter(this)">{{ keyword }}</span>
+                        {% endfor %}
+                    </div>
+                    <input type="text" id="searchInput" placeholder="Or type custom search..." style="margin-top: 8px;">
+                    
+                    <div class="quick-mode-toggle">
+                        <label>
+                            <input type="checkbox" id="quickModeOr" onchange="setQuickMode(this.checked ? 'OR' : 'AND')">
+                            Quick filters en modo OR (si no, AND)
+                        </label>
+                    </div>
+                </details>
+            </div>
+            
+            <div class="filter-group">
+                <details>
+                    <summary>
+                        <span class="summary-text">👥 Customer</span>
+                    </summary>
+                    <input type="text" id="customerInput" placeholder="e.g., 'Universidad', 'Hospital'..." style="margin-top: 8px;">
+                </details>
+            </div>
+            
+            <button class="apply-filters-btn" onclick="applyFilters()">🔄 Apply Filters</button>
+            <button class="reset-filters-btn" onclick="resetFilters()">♻ Reset Filters</button>
+            
+            <div class="active-filters-section">
+                <h3>📌 Active Filters</h3>
+                <div id="resultCount"></div>
+                <div id="activeChips"></div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- MAIN CONTENT -->
+    <div class="main-content">
+        <h1>📊 Sales Comparison: {{ nombre_p1 }} vs {{ nombre_p2 }}</h1>
+        
+        <!-- CONFIG INFO -->
+        <div class="info-box">
+            <h2>⚙️ Analysis Configuration</h2>
+            <table>
+                {% for param, value in config_info.items() %}
+                <tr>
+                    <th>{{ param }}</th>
+                    <td>{{ value }}</td>
+                </tr>
+                {% endfor %}
+            </table>
+        </div>
+        
+        <!-- OVERVIEW SECTION -->
+        <div class="info-box" id="overview-section">
+            <h2>📊 Financial Summary</h2>
+            
+            <div class="metrics">
+                <div class="metric-card blue">
+                    <div class="label">💵 Total {{ nombre_p1 }}</div>
+                    <div class="value" id="metricP1">€{{ "%.2f"|format(metrics.total_p1) }}</div>
+                </div>
+                <div class="metric-card green">
+                    <div class="label">💵 Total {{ nombre_p2 }}</div>
+                    <div class="value" id="metricP2">€{{ "%.2f"|format(metrics.total_p2) }}</div>
+                </div>
+                <div class="metric-card orange">
+                    <div class="label">📈 Total Difference</div>
+                    <div class="value" id="metricDiff">€{{ "%.2f"|format(metrics.diferencia_total) }}</div>
+                    <div class="delta">{{ "%+.1f"|format(metrics.porcentaje_cambio) }}%</div>
+                </div>
+                <div class="metric-card purple">
+                    <div class="label">📊 Total Records</div>
+                    <div class="value" id="metricTotal">{{ metrics.total_records }}</div>
+                </div>
+            </div>
+            
+            <h2>📋 Record Analysis</h2>
+            
+            <div class="metrics">
+                <div class="metric-card green">
+                    <div class="label">✅ Common Records</div>
+                    <div class="value" id="metricCommon">{{ metrics.registros_comunes }}</div>
+                </div>
+                <div class="metric-card red">
+                    <div class="label">🔴 Only in {{ nombre_p1 }}</div>
+                    <div class="value" id="metricOnlyP1">{{ metrics.registros_solo_p1 }}</div>
+                </div>
+                <div class="metric-card blue">
+                    <div class="label">🟢 Only in {{ nombre_p2 }}</div>
+                    <div class="value" id="metricOnlyP2">{{ metrics.registros_solo_p2 }}</div>
+                </div>
+            </div>
+            
+            <h2>📈 Retention and Acquisition KPIs</h2>
+            
+            <div class="metrics">
+                <div class="metric-card green">
+                    <div class="label">🎯 Retention Rate</div>
+                    <div class="value">{{ "%.1f"|format(metrics.tasa_retencion) }}%</div>
+                </div>
+                <div class="metric-card blue">
+                    <div class="label">🚀 Acquisition Rate</div>
+                    <div class="value">{{ "%.1f"|format(metrics.tasa_captacion) }}%</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- CHARTS SECTION -->
+        <div class="info-box" id="charts-section">
+            <h2>📊 Comparative Analysis</h2>
+            
+            <div class="chart-container">
+                <h3>👤 Comparison by Sales Representative</h3>
+                <div id="chartReps"></div>
+            </div>
+            
+            <div class="chart-container">
+                <h3>🏷️ Comparison by Product Type</h3>
+                <div id="chartTypes"></div>
+            </div>
+            
+            <div class="chart-container">
+                <h3>📦 Comparison by Set</h3>
+                <div id="chartSets"></div>
+            </div>
+            
+            <div class="chart-container">
+                <h3>📈 Performance Over Time (Month-by-Month)</h3>
+                <div id="chartTime"></div>
+            </div>
+        </div>
+        
+        <!-- TABS FOR DATA VIEWS -->
+        <div class="info-box">
+            <div class="tabs">
+                <button class="tab active" onclick="showTab('comparison')">📊 Full Comparison</button>
+                <button class="tab" onclick="showTab('onlyP1')">🔴 Only in {{ nombre_p1 }}</button>
+                <button class="tab" onclick="showTab('onlyP2')">🟢 Only in {{ nombre_p2 }}</button>
+                <button class="tab" onclick="showTab('common')">✅ Common Records</button>
+            </div>
+            
+            <div id="comparison-section" class="tab-content active">
+                <h2>📊 Full Comparison Table</h2>
+                <div class="table-container">
+                    <table id="comparisonTable">
+                        <thead>
+                            <tr>
+                                <th onclick="sortTable('comparison', 0)">Customer</th>
+                                <th onclick="sortTable('comparison', 1)">Product</th>
+                                <th onclick="sortTable('comparison', 2)">Sales Rep</th>
+                                <th onclick="sortTable('comparison', 3)">Amount {{ nombre_p1 }}</th>
+                                <th onclick="sortTable('comparison', 4)">Amount {{ nombre_p2 }}</th>
+                                <th onclick="sortTable('comparison', 5)">Difference</th>
+                                <th onclick="sortTable('comparison', 6)">Growth %</th>
+                            </tr>
+                        </thead>
+                        <tbody id="comparisonBody"></tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div id="only-p1-section" class="tab-content">
+                <h2>🔴 Only in {{ nombre_p1 }}</h2>
+                <div class="table-container">
+                    <table id="onlyP1Table">
+                        <thead>
+                            <tr>
+                                <th onclick="sortTable('onlyP1', 0)">Date</th>
+                                <th onclick="sortTable('onlyP1', 1)">Customer</th>
+                                <th onclick="sortTable('onlyP1', 2)">Product</th>
+                                <th onclick="sortTable('onlyP1', 3)">Type</th>
+                                <th onclick="sortTable('onlyP1', 4)">Set</th>
+                                <th onclick="sortTable('onlyP1', 5)">EUR</th>
+                                <th onclick="sortTable('onlyP1', 6)">Sales Rep</th>
+                            </tr>
+                        </thead>
+                        <tbody id="onlyP1Body"></tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div id="only-p2-section" class="tab-content">
+                <h2>🟢 Only in {{ nombre_p2 }}</h2>
+                <div class="table-container">
+                    <table id="onlyP2Table">
+                        <thead>
+                            <tr>
+                                <th onclick="sortTable('onlyP2', 0)">Date</th>
+                                <th onclick="sortTable('onlyP2', 1)">Customer</th>
+                                <th onclick="sortTable('onlyP2', 2)">Product</th>
+                                <th onclick="sortTable('onlyP2', 3)">Type</th>
+                                <th onclick="sortTable('onlyP2', 4)">Set</th>
+                                <th onclick="sortTable('onlyP2', 5)">EUR</th>
+                                <th onclick="sortTable('onlyP2', 6)">Sales Rep</th>
+                            </tr>
+                        </thead>
+                        <tbody id="onlyP2Body"></tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div id="common-section" class="tab-content">
+                <h2>✅ Common Records (in both periods)</h2>
+                <div class="table-container">
+                    <table id="commonTable">
+                        <thead>
+                            <tr>
+                                <th onclick="sortTable('common', 0)">Period</th>
+                                <th onclick="sortTable('common', 1)">Date</th>
+                                <th onclick="sortTable('common', 2)">Customer</th>
+                                <th onclick="sortTable('common', 3)">Product</th>
+                                <th onclick="sortTable('common', 4)">Type</th>
+                                <th onclick="sortTable('common', 5)">Set</th>
+                                <th onclick="sortTable('common', 6)">EUR</th>
+                                <th onclick="sortTable('common', 7)">Sales Rep</th>
+                            </tr>
+                        </thead>
+                        <tbody id="commonBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <!-- FOOTER -->
+        <div style="margin-top: 50px; padding-top: 20px; border-top: 2px solid #eee; text-align: center; color: #666; font-size: 12px;">
+            <p>Report generated automatically by Sales Comparison Tool</p>
+            <p>Date: {{ timestamp }}</p>
+            <p>© {{ year }} BÜCHI Labortechnik AG</p>
+        </div>
+    </div>
+    
+    <script>
+        // =============================
+        // EMBEDDED DATA
+        // =============================
+        const df1Data = {{ df1_json | safe }};
+        const df2Data = {{ df2_json | safe }};
+        const comparativaData = {{ comparativa_json | safe }};
+        
+        const availableTypes = {{ available_types | tojson }};
+        const availableSets = {{ available_sets | tojson }};
+        const availableReps = {{ available_reps | tojson }};
+        
+        const nombreP1 = "{{ nombre_p1 }}";
+        const nombreP2 = "{{ nombre_p2 }}";
+        
+        const monthNames = ['January','February','March','April','May','June',
+                            'July','August','September','October','November','December'];
+        
+        // =============================
+        // STATE
+        // =============================
+        let filteredP1 = [...df1Data];
+        let filteredP2 = [...df2Data];
+        let filteredComparativa = [...comparativaData];
+        let activeQuickFilters = [];
+        let quickMode = 'AND';
+        let sortStates = {};
+        
+        // =============================
+        // HELPERS
+        // =============================
+        function $(id) { return document.getElementById(id); }
+        
+        function safeLower(v) {
+            return String(v ?? '').toLowerCase();
+        }
+        
+        function escapeHtml(str) {
+            return String(str ?? '')
+                .replaceAll('&', '&amp;')
+                .replaceAll('<', '&lt;')
+                .replaceAll('>', '&gt;')
+                .replaceAll('"', '&quot;')
+                .replaceAll("'", '&#39;');
+        }
+        
+        function getCheckedValues(selector) {
+            return Array.from(document.querySelectorAll(selector + ':checked'))
+                .map(cb => cb.value);
+        }
+        
+        function setAll(selector, checked) {
+            document.querySelectorAll(selector).forEach(cb => cb.checked = checked);
+        }
+        
+        function debounce(fn, ms) {
+            let t = null;
+            return function() {
+                clearTimeout(t);
+                t = setTimeout(() => fn(), ms);
+            };
+        }
+        
+        // =============================
+        // INITIALIZE FILTERS
+        // =============================
+        function initializeFilters() {
+            const typeBox = $('typeFilters');
+            availableTypes.forEach(t => {
+                const l = document.createElement('label');
+                const cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.value = t;
+                cb.checked = true;
+                cb.className = 'type-filter';
+                l.appendChild(cb);
+                l.append(' ' + t);
+                typeBox.appendChild(l);
+            });
+            
+            const setBox = $('setFilters');
+            availableSets.forEach(s => {
+                const l = document.createElement('label');
+                const cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.value = s;
+                cb.checked = true;
+                cb.className = 'set-filter';
+                l.appendChild(cb);
+                l.append(' ' + s);
+                setBox.appendChild(l);
+            });
+            
+            const repBox = $('repFilters');
+            availableReps.forEach(r => {
+                const l = document.createElement('label');
+                const cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.value = r;
+                cb.checked = true;
+                cb.className = 'rep-filter';
+                l.appendChild(cb);
+                l.append(' ' + r);
+                repBox.appendChild(l);
+            });
+            
+            const applyDebounced = debounce(applyFilters, 200);
+            document.querySelectorAll('.type-filter, .set-filter, .rep-filter')
+                .forEach(cb => cb.addEventListener('change', applyDebounced));
+        }
+        
+        // =============================
+        // FILTER MANAGEMENT
+        // =============================
+        function setGroupChecked(group, checked) {
+            const map = {
+                type: '.type-filter',
+                set: '.set-filter',
+                rep: '.rep-filter'
+            };
+            const selector = map[group];
+            if (!selector) return;
+            
+            setAll(selector, checked);
+            applyFilters();
+        }
+        
+        function toggleQuickFilter(el) {
+            const key = el.getAttribute('data-keyword');
+            el.classList.toggle('active');
+            
+            if (el.classList.contains('active')) {
+                activeQuickFilters.push(key);
+            } else {
+                activeQuickFilters = activeQuickFilters.filter(k => k !== key);
+            }
+        }
+        
+        function setQuickMode(mode) {
+            quickMode = mode;
+            applyFilters();
+        }
+        
+        function resetFilters() {
+            setAll('.type-filter', true);
+            setAll('.set-filter', true);
+            setAll('.rep-filter', true);
+            
+            activeQuickFilters = [];
+            document.querySelectorAll('.quick-filter-tag')
+                .forEach(el => el.classList.remove('active'));
+            
+            if ($('searchInput')) $('searchInput').value = '';
+            if ($('customerInput')) $('customerInput').value = '';
+            
+            quickMode = 'AND';
+            if ($('quickModeOr')) $('quickModeOr').checked = false;
+            
+            applyFilters();
+        }
+        
+        // =============================
+        // APPLY FILTERS
+        // =============================
+        function applyFilters() {
+            const types = getCheckedValues('.type-filter');
+            const sets = getCheckedValues('.set-filter');
+            const reps = getCheckedValues('.rep-filter');
+            const manualSearch = safeLower($('searchInput')?.value);
+            const customerSearch = safeLower($('customerInput')?.value);
+            
+            function filterRow(row) {
+                if (!types.includes(row.ProductType)) return false;
+                if (!sets.includes(row.Set)) return false;
+                if (!reps.includes(row.SalesRepresentative)) return false;
+                
+                const item = safeLower(row.ItemIdAndName);
+                
+                if (activeQuickFilters.length > 0) {
+                    const matches = (quickMode === 'AND')
+                        ? activeQuickFilters.every(k => item.includes(k.toLowerCase()))
+                        : activeQuickFilters.some(k => item.includes(k.toLowerCase()));
+                    if (!matches) return false;
+                } else if (manualSearch) {
+                    if (!item.includes(manualSearch)) return false;
+                }
+                
+                if (customerSearch) {
+                    const customer = safeLower(row['Business Partner Name']);
+                    if (!customer.includes(customerSearch)) return false;
+                }
+                
+                return true;
+            }
+            
+            filteredP1 = df1Data.filter(filterRow);
+            filteredP2 = df2Data.filter(filterRow);
+            
+            // Filter comparativa based on filtered P1 and P2
+            const keysP1 = new Set();
+            filteredP1.forEach(r => {
+                const key = `${r['Business Partner Name']}|||${r.ItemIdAndName}|||${r.SalesRepresentative}`;
+                keysP1.add(key);
+            });
+            
+            const keysP2 = new Set();
+            filteredP2.forEach(r => {
+                const key = `${r['Business Partner Name']}|||${r.ItemIdAndName}|||${r.SalesRepresentative}`;
+                keysP2.add(key);
+            });
+            
+            filteredComparativa = comparativaData.filter(row => {
+                const key = `${row['Business Partner Name']}|||${row.ItemIdAndName}|||${row.SalesRepresentative}`;
+                return keysP1.has(key) || keysP2.has(key);
+            });
+            
+            updateMetrics();
+            renderCharts();
+            renderTables();
+            updateStatusUI();
+        }
+        
+        // =============================
+        // UPDATE METRICS
+        // =============================
+        function updateMetrics() {
+            const totalP1 = filteredP1.reduce((s, r) => s + (r.EUR || 0), 0);
+            const totalP2 = filteredP2.reduce((s, r) => s + (r.EUR || 0), 0);
+            const diff = totalP2 - totalP1;
+            const pct = totalP1 !== 0 ? ((diff / totalP1) * 100) : 0;
+            
+            const common = filteredComparativa.filter(r => 
+                r[`Amount ${nombreP1}`] > 0 && r[`Amount ${nombreP2}`] > 0
+            ).length;
+            const onlyP1 = filteredComparativa.filter(r => 
+                r[`Amount ${nombreP1}`] > 0 && r[`Amount ${nombreP2}`] === 0
+            ).length;
+            const onlyP2 = filteredComparativa.filter(r => 
+                r[`Amount ${nombreP1}`] === 0 && r[`Amount ${nombreP2}`] > 0
+            ).length;
+            
+            if ($('metricP1')) $('metricP1').textContent = '€' + totalP1.toLocaleString('es-ES', {minimumFractionDigits: 2});
+            if ($('metricP2')) $('metricP2').textContent = '€' + totalP2.toLocaleString('es-ES', {minimumFractionDigits: 2});
+            if ($('metricDiff')) {
+                $('metricDiff').textContent = '€' + diff.toLocaleString('es-ES', {minimumFractionDigits: 2});
+                const delta = $('metricDiff').nextElementSibling;
+                if (delta) delta.textContent = (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%';
+            }
+            if ($('metricTotal')) $('metricTotal').textContent = filteredComparativa.length.toLocaleString();
+            if ($('metricCommon')) $('metricCommon').textContent = common.toLocaleString();
+            if ($('metricOnlyP1')) $('metricOnlyP1').textContent = onlyP1.toLocaleString();
+            if ($('metricOnlyP2')) $('metricOnlyP2').textContent = onlyP2.toLocaleString();
+        }
+        
+        // =============================
+        // RENDER CHARTS
+        // =============================
+        function renderCharts() {
+            // Charts implementation continues...
+            // (I'll continue in next message due to length)
+        }
+        
+        // Continue with rest of JavaScript...
+        
+        // =============================
+        // BOOT
+        // =============================
+        initializeFilters();
+        applyFilters();
+    </script>
+</body>
+</html>

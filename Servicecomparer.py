@@ -3,7 +3,20 @@ import pandas as pd
 import tempfile
 import os
 from io import BytesIO
-from datetime import datetime
+from datetime import datetime, timedelta
+from calendar import monthrange
+import logging
+import plotly.express as px
+import plotly.graph_objects as go
+from buchi_streamlit_theme import apply_buchi_styles
+from sales_comparison_report_generator import generate_sales_comparison_html
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 # Page configuration
 st.set_page_config(
@@ -12,42 +25,18 @@ st.set_page_config(
     page_icon="📊"
 )
 
-# Custom CSS for better appearance
-st.markdown("""
-<style>
-    .step-header {
-        background-color: #f0f2f6;
-        padding: 10px;
-        border-radius: 5px;
-        margin: 10px 0;
-    }
-    .success-box {
-        background-color: #d4edda;
-        padding: 15px;
-        border-radius: 5px;
-        border-left: 5px solid #28a745;
-        margin: 10px 0;
-    }
-    .warning-box {
-        background-color: #fff3cd;
-        padding: 15px;
-        border-radius: 5px;
-        border-left: 5px solid #ffc107;
-        margin: 10px 0;
-    }
-    .info-box {
-        background-color: #d1ecf1;
-        padding: 15px;
-        border-radius: 5px;
-        border-left: 5px solid #17a2b8;
-        margin: 10px 0;
-    }
-</style>
-""", unsafe_allow_html=True)
+# Apply BUCHI corporate styles
+apply_buchi_styles()
 
-# Main title
-st.title("📊 Sales Comparison by Period")
-st.markdown("### Tool to analyze and compare sales between two periods from a single file")
+# Initialize session state
+if 'df' not in st.session_state:
+    st.session_state.df = None
+if 'file_key' not in st.session_state:
+    st.session_state.file_key = None
+
+# Main title with BUCHI styling
+st.markdown('<div class="main-header">📊 Sales Comparison by Period</div>', unsafe_allow_html=True)
+st.markdown("### Advanced tool to analyze and compare sales between two periods")
 
 # Initial information and guide
 with st.expander("ℹ️ **HOW TO USE THIS APPLICATION** - Click here to see the guide", expanded=False):
@@ -94,20 +83,29 @@ with st.expander("ℹ️ **HOW TO USE THIS APPLICATION** - Click here to see the
     
     ### **STEP 4:** Apply filters
     - Choose which product types to include
+    - Filter by sales representative (optional)
+    - Search by product/service name (optional)
     
-    ### **STEP 5:** Download results
-    - Review the metrics summary
+    ### **STEP 5:** Review analytics
+    - View financial metrics
+    - Analyze retention and acquisition rates
+    - Review top 10 rankings
+    - Interactive visualizations
+    
+    ### **STEP 6:** Download results
     - Download the Excel file with the complete analysis
+    - Export to CSV if needed
     
     ---
     
     ## 📊 What will you get?
-    An Excel file with **5 sheets**:
+    An Excel file with **6 sheets**:
     1. **Comparison** - Complete table with all sales
     2. **Original Data** - Complete transactions from both periods
     3. **Only in Period 1** - Sales that didn't repeat (lost customers)
     4. **Only in Period 2** - New sales (gained customers)
     5. **Common in both** - Recurring sales (loyal customers)
+    6. **Configuration** - Analysis parameters for reproducibility
     
     ## 💡 Usage examples:
     - Compare **Q1 2024 vs Q1 2023** → Year-over-year growth
@@ -118,20 +116,60 @@ with st.expander("ℹ️ **HOW TO USE THIS APPLICATION** - Click here to see the
 # Visual separator
 st.markdown("---")
 
-# Function to read file in Excel or CSV
+# ============================================================================
+# UTILITY FUNCTIONS
+# ============================================================================
+
+@st.cache_data
 def load_file(file):
+    """Load file - identical to Service Planning Dashboard approach"""
     if file is not None:
         try:
             if file.name.endswith(".csv"):
-                return pd.read_csv(file, encoding='utf-8')
+                df = pd.read_csv(file, encoding='utf-8')
             else:
-                return pd.read_excel(file)
+                df = pd.read_excel(file)
+            
+            df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+            df['Year'] = df['Date'].dt.year
+            df['Month'] = df['Date'].dt.month
+            df['Month_Name'] = df['Date'].dt.strftime('%B')
+            
+            return df
         except Exception as e:
             st.error(f"❌ Error loading file: {str(e)}")
             return None
     return None
 
-# Function to parse manual date input
+def validate_dataframe(df, required_columns):
+    """Validate that DataFrame has required columns"""
+    missing_cols = [col for col in required_columns if col not in df.columns]
+    if missing_cols:
+        st.error(f"❌ Missing required columns: {', '.join(missing_cols)}")
+        st.info("📋 Available columns: " + ", ".join(df.columns.tolist()))
+        logger.warning(f"Missing columns: {missing_cols}")
+        return False
+    logger.info("All required columns present")
+    return True
+
+def safe_date_conversion(df, col_fecha):
+    """Convert dates safely with feedback"""
+    try:
+        df = df.copy()  # Create explicit copy to avoid SettingWithCopyWarning
+        df[col_fecha] = pd.to_datetime(df[col_fecha], errors='coerce')
+        invalid_dates = df[col_fecha].isna().sum()
+        if invalid_dates > 0:
+            st.warning(f"⚠️ {invalid_dates} invalid dates found and excluded")
+            logger.warning(f"{invalid_dates} invalid dates excluded")
+        df = df.dropna(subset=[col_fecha])
+        df[col_fecha] = df[col_fecha].dt.date
+        logger.info(f"Dates converted successfully: {len(df)} valid records")
+        return df
+    except Exception as e:
+        logger.error(f"Error processing dates: {str(e)}")
+        st.error(f"❌ Error processing dates: {str(e)}")
+        return None
+
 def parse_date_input(date_str):
     """Parse date string in format YYYY-MM-DD"""
     try:
@@ -139,42 +177,280 @@ def parse_date_input(date_str):
     except:
         return None
 
-# =============================================================================
-# STEP 1: FILE UPLOAD
-# =============================================================================
-st.markdown("## 📁 STEP 1: File Upload")
-st.markdown("Upload your sales file exported from Power BI (should contain data for both periods)")
+def create_comparison_chart(total_p1, total_p2, nombre_p1, nombre_p2):
+    """Create comparison bar chart"""
+    df_viz = pd.DataFrame({
+        'Period': [nombre_p1, nombre_p2],
+        'Sales': [total_p1, total_p2]
+    })
+    
+    fig = px.bar(
+        df_viz, 
+        x='Period', 
+        y='Sales',
+        title='📊 Total Sales Comparison',
+        text_auto='.2s',
+        color='Period',
+        color_discrete_sequence=['#FF6B6B', '#4ECDC4']
+    )
+    fig.update_traces(texttemplate='€%{text}', textposition='outside')
+    fig.update_layout(
+        showlegend=False,
+        height=400,
+        yaxis_title="Sales (€)",
+        xaxis_title=""
+    )
+    return fig
 
-file = st.file_uploader(
-    "Sales file (Excel or CSV)", 
+def create_retention_pie_chart(comunes, solo_p1, solo_p2, nombre_p1, nombre_p2):
+    """Create retention pie chart"""
+    df_pie = pd.DataFrame({
+        'Category': ['Common', f'Only {nombre_p1}', f'Only {nombre_p2}'],
+        'Count': [comunes, solo_p1, solo_p2]
+    })
+    
+    fig_pie = px.pie(
+        df_pie, 
+        values='Count', 
+        names='Category',
+        title='🎯 Record Distribution',
+        color_discrete_sequence=['#4ECDC4', '#FF6B6B', '#95E1D3']
+    )
+    fig_pie.update_layout(height=400)
+    return fig_pie
+
+def create_growth_chart(comparativa, nombre_p1, nombre_p2):
+    """Create growth trend chart for top products"""
+    top_growth = comparativa.nlargest(10, 'Amount Difference').reset_index()
+    
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        name=nombre_p1,
+        y=top_growth[top_growth.columns[1]],  # Product name
+        x=top_growth[f"Amount {nombre_p1}"],
+        orientation='h',
+        marker=dict(color='#FF6B6B')
+    ))
+    fig.add_trace(go.Bar(
+        name=nombre_p2,
+        y=top_growth[top_growth.columns[1]],
+        x=top_growth[f"Amount {nombre_p2}"],
+        orientation='h',
+        marker=dict(color='#4ECDC4')
+    ))
+    
+    fig.update_layout(
+        title='📈 Top 10 Products by Growth',
+        barmode='group',
+        height=500,
+        xaxis_title="Sales (€)",
+        yaxis_title="Product"
+    )
+    return fig
+
+# ============================================================================
+# SIDEBAR: FILE UPLOAD
+# ============================================================================
+st.sidebar.markdown("## 📁 Data Upload")
+uploaded_file = st.sidebar.file_uploader(
+    "Upload Sales File (Excel or CSV)", 
     type=["xlsx", "csv"], 
     key="main_file",
     help="Export from Power BI: Data → Export data → .xlsx or .csv"
 )
 
-# Processing and comparison
-if file:
-    st.success("✅ **File loaded successfully**")
+if uploaded_file:
+    # Identificador estable del fichero (nombre + tamaño) para evitar recalcular en cada rerun
+    file_key = f"{uploaded_file.name}:{uploaded_file.size}"
     
-    df = load_file(file)
+    # Si cambia el archivo, reiniciar session state
+    if st.session_state.get("file_key") != file_key:
+        st.session_state.file_key = file_key
+        st.session_state.df = None
     
-    if df is None:
+    # Cargar archivo (solo si no está ya cargado)
+    if st.session_state.df is None:
+        df = load_file(uploaded_file)
+        
+        if df is None:
+            st.stop()
+        
+        st.session_state.df = df
+    else:
+        df = st.session_state.df
+    
+    st.sidebar.success(f"✅ {len(df):,} records loaded")
+    
+    # Validate required columns
+    required_cols = ['Date', 'Business Partner Name', 'ItemIdAndName', 'ProductType', 
+                     'Qty', 'EUR', 'SalesRepresentative', 'Set', 'Productline']
+    
+    if not validate_dataframe(df, required_cols):
         st.stop()
     
-    # =============================================================================
+    # Get available options for filters
+    available_years = sorted(df['Year'].dropna().unique().astype(int).tolist()) if 'Year' in df.columns else []
+    available_reps = sorted(df['SalesRepresentative'].dropna().unique().tolist())
+    available_types = sorted(df['ProductType'].dropna().unique().tolist())
+    available_sets = sorted(df['Set'].dropna().unique().tolist())
+    month_options = list(range(1, 13))
+    month_labels = {
+        1: 'January', 2: 'February', 3: 'March', 4: 'April',
+        5: 'May', 6: 'June', 7: 'July', 8: 'August',
+        9: 'September', 10: 'October', 11: 'November', 12: 'December'
+    }
+    
+    # Reset function
+    def reset_all_filters():
+        st.session_state["type_filter"] = available_types
+        st.session_state["set_filter"] = available_sets
+        st.session_state["rep_filter"] = available_reps
+        st.session_state["search_filter"] = ""
+        st.session_state["customer_filter"] = ""
+        st.session_state["selected_quick_filters"] = []
+    
+    # =========================================================================
+    # SIDEBAR: FILTERS (COLLAPSIBLE)
+    # =========================================================================
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("## 🎛️ Filters")
+    
+    # Product Type filter - COLLAPSIBLE
+    with st.sidebar.expander("🏷️ Product Type", expanded=False):
+        col_type1, col_type2 = st.sidebar.columns(2)
+        with col_type1:
+            st.button("✅ All", key="type_all", use_container_width=True,
+                     on_click=lambda: st.session_state.update({"type_filter": available_types}))
+        with col_type2:
+            st.button("❌ None", key="type_none", use_container_width=True,
+                     on_click=lambda: st.session_state.update({"type_filter": []}))
+        
+        tipos_seleccionados = st.multiselect(
+            "Select product types",
+            available_types,
+            default=available_types,
+            key="type_filter",
+            label_visibility="collapsed",
+            help="You can exclude types like 'Rental', 'Sample', etc."
+        )
+    
+    # Set filter - COLLAPSIBLE
+    with st.sidebar.expander("📦 Set", expanded=False):
+        col_set1, col_set2 = st.sidebar.columns(2)
+        with col_set1:
+            st.button("✅ All", key="set_all", use_container_width=True,
+                     on_click=lambda: st.session_state.update({"set_filter": available_sets}))
+        with col_set2:
+            st.button("❌ None", key="set_none", use_container_width=True,
+                     on_click=lambda: st.session_state.update({"set_filter": []}))
+        
+        selected_sets = st.multiselect(
+            "Select sets",
+            available_sets,
+            default=available_sets,
+            key="set_filter",
+            label_visibility="collapsed"
+        )
+    
+    # Sales Representative filter - COLLAPSIBLE
+    with st.sidebar.expander("👤 Sales Representative", expanded=False):
+        col_rep1, col_rep2 = st.sidebar.columns(2)
+        with col_rep1:
+            st.button("✅ All", key="rep_all", use_container_width=True,
+                     on_click=lambda: st.session_state.update({"rep_filter": available_reps}))
+        with col_rep2:
+            st.button("❌ None", key="rep_none", use_container_width=True,
+                     on_click=lambda: st.session_state.update({"rep_filter": []}))
+        
+        selected_reps = st.multiselect(
+            "Select representatives",
+            available_reps,
+            default=available_reps,
+            key="rep_filter",
+            label_visibility="collapsed"
+        )
+    
+    # Search filter - COLLAPSIBLE with Quick Filters
+    with st.sidebar.expander("🔍 Search Service", expanded=False):
+        # AND/OR selector
+        quick_mode = st.radio(
+            "Quick filter mode:",
+            options=['AND', 'OR'],
+            horizontal=True,
+            key="quick_filter_mode",
+            help="AND = All keywords must match | OR = Any keyword matches"
+        )
+        
+        # Initialize quick filters in session state
+        if 'selected_quick_filters' not in st.session_state:
+            st.session_state.selected_quick_filters = []
+        
+        # Quick filter keywords
+        quick_filter_keywords = ['CARE', 'Exact', 'Start', 'Circle', 'Maintain', 'IQ/OQ', 'OQ', 'Install', 'Academy']
+        
+        # Display buttons in 3 columns
+        cols = st.columns(3)
+        for idx, keyword in enumerate(quick_filter_keywords):
+            col = cols[idx % 3]
+            # Check if button is active
+            is_active = keyword in st.session_state.selected_quick_filters
+            if col.button(
+                keyword, 
+                key=f"quick_{keyword}",
+                use_container_width=True,
+                type="primary" if is_active else "secondary"
+            ):
+                # Toggle keyword
+                if is_active:
+                    st.session_state.selected_quick_filters.remove(keyword)
+                else:
+                    st.session_state.selected_quick_filters.append(keyword)
+                st.rerun()
+        
+        # Manual search input
+        search_text = st.text_input(
+            "Or type custom search",
+            placeholder="e.g., 'pump', 'valve', 'maintenance'...",
+            key="search_filter",
+            help="Filter products/services that contain this text (case insensitive)",
+            label_visibility="collapsed"
+        )
+    
+    # Customer filter - COLLAPSIBLE
+    with st.sidebar.expander("👥 Customer", expanded=False):
+        customer_search = st.text_input(
+            "Filter by Customer Name",
+            placeholder="e.g., 'Universidad', 'Hospital'...",
+            key="customer_filter",
+            help="Filter by customer name (case insensitive)",
+            label_visibility="collapsed"
+        )
+    
+    # RESET BUTTON
+    st.sidebar.markdown("---")
+    st.sidebar.button(
+        "🔄 Reset All Filters",
+        type="primary",
+        use_container_width=True,
+        on_click=reset_all_filters,
+        key="reset_btn"
+    )
+    
+    # =========================================================================
     # DATA PREVIEW
-    # =============================================================================
+    # =========================================================================
     st.markdown("---")
-    st.markdown("### 👀 Data Preview")
-    st.info(f"🔍 Loaded {len(df)} records. Verify that the data is correct before continuing")
+    st.markdown('<div class="section-header">👀 Data Preview</div>', unsafe_allow_html=True)
+    st.info(f"🔍 Loaded {len(df):,} records. Verify that the data is correct before continuing")
     
-    st.dataframe(df.head(10), use_container_width=True)
+    with st.expander("📋 View first 20 rows", expanded=False):
+        st.dataframe(df.head(20), use_container_width=True)
     
-    # =============================================================================
-    # STEP 2: COLUMN ASSIGNMENT
-    # =============================================================================
+    # =========================================================================
+    # COLUMN ASSIGNMENT
+    # =========================================================================
     st.markdown("---")
-    st.markdown("## 🛠️ STEP 2: Column Assignment")
+    st.markdown('<div class="section-header">🛠️ Column Assignment</div>', unsafe_allow_html=True)
     st.markdown("The application detects columns automatically. **Only adjust if necessary.**")
     
     # Assign fixed column names
@@ -205,142 +481,288 @@ if file:
     
     with st.expander("🔍 View detected columns", expanded=False):
         st.markdown("**Detected columns:**")
-        st.write(f"- Date: `{col_fecha}`")
-        st.write(f"- Customer: `{col_cliente}`")
-        st.write(f"- Product: `{col_producto}`")
-        st.write(f"- Type: `{col_tipo}`")
-        st.write(f"- Quantity: `{col_cantidad}`")
-        st.write(f"- Amount: `{col_precio}`")
-        st.write(f"- Sales Rep: `{col_sales_rep}`")
-        st.write(f"- Set: `{col_set}`")
-        st.write(f"- Productline: `{col_productline}`")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.write(f"- Date: `{col_fecha}`")
+            st.write(f"- Customer: `{col_cliente}`")
+            st.write(f"- Product: `{col_producto}`")
+        with col2:
+            st.write(f"- Type: `{col_tipo}`")
+            st.write(f"- Quantity: `{col_cantidad}`")
+            st.write(f"- Amount: `{col_precio}`")
+        with col3:
+            st.write(f"- Sales Rep: `{col_sales_rep}`")
+            st.write(f"- Set: `{col_set}`")
+            st.write(f"- Productline: `{col_productline}`")
     
-    # Format dates
-    df[col_fecha] = pd.to_datetime(df[col_fecha], errors='coerce').dt.date
+    # Format dates safely
+    df = safe_date_conversion(df, col_fecha)
+    
+    if df is None or df.empty:
+        st.error("❌ Tras convertir fechas, no queda ningún registro válido. Revisa el formato de la columna Date del export de Power BI.")
+        st.stop()
     
     # Get date range from data
     min_date = pd.to_datetime(df[col_fecha]).min()
     max_date = pd.to_datetime(df[col_fecha]).max()
     
-    # =============================================================================
-    # STEP 3: PERIOD DEFINITION
-    # =============================================================================
+    logger.info(f"Date range: {min_date.date()} to {max_date.date()}")
+    
+    # Initialize period selection state
+    if 'period_preset' not in st.session_state:
+        st.session_state.period_preset = None
+    if 'period_year_1' not in st.session_state:
+        st.session_state.period_year_1 = max_date.year
+    if 'period_year_2' not in st.session_state:
+        st.session_state.period_year_2 = max_date.year - 1
+    if 'period_months' not in st.session_state:
+        st.session_state.period_months = None
+    
+    # =========================================================================
+    # PERIOD DEFINITION WITH QUICK BUTTONS
+    # =========================================================================
     st.markdown("---")
-    st.markdown("## 📅 STEP 3: Define Periods to Compare")
+    st.markdown('<div class="section-header">📅 Define Periods to Compare</div>', unsafe_allow_html=True)
     st.markdown(f"**Available date range in file:** {min_date.date()} to {max_date.date()}")
-    st.info("💡 **Tip:** You can use the calendar picker or type dates manually in YYYY-MM-DD format (e.g., 2024-01-01)")
+    
+    # Quick period selection
+    st.markdown("### ⚡ Quick Period Selection")
+    st.info("💡 **Tip:** Select comparison type, choose years/months, and click Apply to auto-fill dates. You can still edit manually after.")
+    
+    # Row 1: Preset type (Years or Months)
+    col_preset, col_apply = st.columns([3, 1])
+    with col_preset:
+        preset_type = st.radio(
+            "Comparison type:",
+            options=["Years", "Months"],
+            horizontal=True,
+            key="preset_type_radio",
+            help="Compare full years or specific months"
+        )
+    
+    # Row 2: Year/Month selection
+    year_1 = None
+    year_2 = None
+    month_range = None
+    
+    # Ensure we have valid years and sort them (newest first)
+    if not available_years or len(available_years) == 0:
+        st.error("❌ No years found in data. Please check your Date column.")
+        st.stop()
+    
+    years_sorted = sorted(available_years, reverse=True)  # Newest first
+    
+    if preset_type == "Years":
+        col_y1, col_y2 = st.columns(2)
+        with col_y1:
+            year_1 = st.selectbox(
+                "Period 1 Year:",
+                options=years_sorted,
+                index=0,
+                
+                key="quick_year_1"
+            )
+        with col_y2:
+            year_2 = st.selectbox(
+                "Period 2 Year:",
+                options=years_sorted,
+                index=min(1, len(years_sorted) - 1),
+                key="quick_year_2"
+            )
+    else:  # Months
+        col_months, col_y1, col_y2 = st.columns([2, 1, 1])
+        with col_months:
+            month_labels_full = {
+                1: 'January', 2: 'February', 3: 'March', 4: 'April',
+                5: 'May', 6: 'June', 7: 'July', 8: 'August',
+                9: 'September', 10: 'October', 11: 'November', 12: 'December'
+            }
+            
+            # Predefined month ranges
+            month_presets = {
+                "Q1 (Jan-Mar)": (1, 3),
+                "Q2 (Apr-Jun)": (4, 6),
+                "Q3 (Jul-Sep)": (7, 9),
+                "Q4 (Oct-Dec)": (10, 12),
+                "H1 (Jan-Jun)": (1, 6),
+                "H2 (Jul-Dec)": (7, 12),
+                "Custom": None
+            }
+            
+            selected_preset = st.selectbox(
+                "Month range:",
+                options=list(month_presets.keys()),
+                key="month_preset_select"
+            )
+            
+            if selected_preset == "Custom":
+                col_m1, col_m2 = st.columns(2)
+                with col_m1:
+                    start_month = st.selectbox(
+                        "From month:",
+                        options=list(range(1, 13)),
+                        format_func=lambda x: month_labels_full[x],
+                        key="custom_start_month"
+                    )
+                with col_m2:
+                    end_month = st.selectbox(
+                        "To month:",
+                        options=list(range(1, 13)),
+                        index=2,  # Default to March
+                        format_func=lambda x: month_labels_full[x],
+                        key="custom_end_month"
+                    )
+                month_range = (start_month, end_month)
+            else:
+                month_range = month_presets[selected_preset]
+        
+        with col_y1:
+            year_1 = st.selectbox(
+                "Period 1 Year:",
+                options=years_sorted,
+                index=min(1, len(years_sorted) - 1), 
+                key="quick_month_year_1"
+            )
+        with col_y2:
+            year_2 = st.selectbox(
+                "Period 2 Year:",
+                options=years_sorted,
+                index=0, 
+                key="quick_month_year_2"
+            )
+    
+    # Apply button
+    with col_apply:
+        st.markdown("<br>", unsafe_allow_html=True)  # Spacing
+        if st.button("🚀 Apply", type="primary", use_container_width=True, key="apply_preset"):
+            # Validate that we have all required values
+            if year_1 is None or year_2 is None:
+                st.error("⚠️ Please select years for both periods")
+                st.stop()
+            
+            if preset_type == "Years":
+                # Full year comparison
+                st.session_state.start_date_1 = f"{year_1}-01-01"
+                st.session_state.end_date_1 = f"{year_1}-12-31"
+                st.session_state.start_date_2 = f"{year_2}-01-01"
+                st.session_state.end_date_2 = f"{year_2}-12-31"
+                st.session_state.nombre_p1 = str(year_1)
+                st.session_state.nombre_p2 = str(year_2)
+            else:
+                # Month range comparison
+                if month_range is None:
+                    st.error("⚠️ Please select a month range first")
+                    st.stop()
+                
+                start_m, end_m = month_range
+                st.session_state.start_date_1 = f"{year_1}-{start_m:02d}-01"
+                # Calculate last day of end month
+                last_day_1 = monthrange(year_1, end_m)[1]
+                st.session_state.end_date_1 = f"{year_1}-{end_m:02d}-{last_day_1}"
+                
+                st.session_state.start_date_2 = f"{year_2}-{start_m:02d}-01"
+                last_day_2 = monthrange(year_2, end_m)[1]
+                st.session_state.end_date_2 = f"{year_2}-{end_m:02d}-{last_day_2}"
+                
+                # Define month_labels_full for name generation
+                month_labels_full = {
+                    1: 'January', 2: 'February', 3: 'March', 4: 'April',
+                    5: 'May', 6: 'June', 7: 'July', 8: 'August',
+                    9: 'September', 10: 'October', 11: 'November', 12: 'December'
+                }
+                
+                st.session_state.nombre_p1 = f"{month_labels_full[start_m]}-{month_labels_full[end_m]} {year_1}"
+                st.session_state.nombre_p2 = f"{month_labels_full[start_m]}-{month_labels_full[end_m]} {year_2}"
+            
+            st.success("✅ Dates applied! You can edit them manually below if needed.")
+            st.rerun()
+    
+    st.markdown("---")
+    st.markdown("### 📝 Period Details (editable)")
     
     col1, col2 = st.columns(2)
     
     # ==================== PERIOD 1 ====================
     with col1:
-        st.markdown("### 📅 Period 1")
+        st.markdown("#### 📅 Period 1")
         
+        # Auto-fill name or use session state
+        default_name_1 = st.session_state.get('nombre_p1', str(max_date.year - 1))
         nombre_periodo_1 = st.text_input(
-            "Name for Period 1 (e.g., 'Q1 2024', 'January 2024')", 
-            value="Period 1", 
-            key="nombre_p1",
-            help="Give it a descriptive name"
+            "Period 1 Name", 
+            value=default_name_1, 
+            key="nombre_p1_input",
+            help="Edit to customize the period name"
         )
         
-        # Toggle between calendar and manual input
-        use_calendar_p1 = st.checkbox("Use calendar picker", value=False, key="calendar_p1")
-        
-        if use_calendar_p1:
-            # Calendar picker
-            date_range_1 = st.date_input(
-                f"Select date range for {nombre_periodo_1}", 
-                [min_date, min_date + pd.Timedelta(days=30)],
-                min_value=min_date,
-                max_value=max_date,
-                key="date_range_p1_cal"
+        # Date inputs
+        col_start, col_end = st.columns(2)
+        with col_start:
+            default_start_1 = st.session_state.get('start_date_1', f"{max_date.year - 1}-01-01")
+            start_str_1 = st.text_input(
+                "Start date (YYYY-MM-DD)",
+                value=default_start_1,
+                key="start_manual_p1"
             )
-            if len(date_range_1) == 2:
-                start_date_1, end_date_1 = date_range_1
-            else:
-                start_date_1 = date_range_1[0]
-                end_date_1 = date_range_1[0]
-        else:
-            # Manual input
-            col_start, col_end = st.columns(2)
-            with col_start:
-                start_str_1 = st.text_input(
-                    "Start date (YYYY-MM-DD)",
-                    value=min_date.strftime("%Y-%m-%d"),
-                    key="start_manual_p1"
-                )
-                start_date_1 = parse_date_input(start_str_1)
-                if start_date_1 is None:
-                    st.error("Invalid date format. Use YYYY-MM-DD")
-                    st.stop()
-            
-            with col_end:
-                end_str_1 = st.text_input(
-                    "End date (YYYY-MM-DD)",
-                    value=(min_date + pd.Timedelta(days=30)).strftime("%Y-%m-%d"),
-                    key="end_manual_p1"
-                )
-                end_date_1 = parse_date_input(end_str_1)
-                if end_date_1 is None:
-                    st.error("Invalid date format. Use YYYY-MM-DD")
-                    st.stop()
+            start_date_1 = parse_date_input(start_str_1)
+            if start_date_1 is None:
+                st.error("Invalid date format. Use YYYY-MM-DD")
+                st.stop()
         
-        st.caption(f"Selected: {start_date_1} to {end_date_1}")
+        with col_end:
+            default_end_1 = st.session_state.get('end_date_1', f"{max_date.year - 1}-12-31")
+            end_str_1 = st.text_input(
+                "End date (YYYY-MM-DD)",
+                value=default_end_1,
+                key="end_manual_p1"
+            )
+            end_date_1 = parse_date_input(end_str_1)
+            if end_date_1 is None:
+                st.error("Invalid date format. Use YYYY-MM-DD")
+                st.stop()
+        
+        st.caption(f"📊 Selected: {start_date_1} to {end_date_1}")
     
     # ==================== PERIOD 2 ====================
     with col2:
-        st.markdown("### 📅 Period 2")
+        st.markdown("#### 📅 Period 2")
         
+        # Auto-fill name or use session state
+        default_name_2 = st.session_state.get('nombre_p2', str(max_date.year))
         nombre_periodo_2 = st.text_input(
-            "Name for Period 2 (e.g., 'Q1 2023', 'January 2023')", 
-            value="Period 2", 
-            key="nombre_p2",
-            help="Give it a descriptive name"
+            "Period 2 Name", 
+            value=default_name_2, 
+            key="nombre_p2_input",
+            help="Edit to customize the period name"
         )
         
-        # Toggle between calendar and manual input
-        use_calendar_p2 = st.checkbox("Use calendar picker", value=False, key="calendar_p2")
-        
-        if use_calendar_p2:
-            # Calendar picker
-            date_range_2 = st.date_input(
-                f"Select date range for {nombre_periodo_2}", 
-                [max_date - pd.Timedelta(days=30), max_date],
-                min_value=min_date,
-                max_value=max_date,
-                key="date_range_p2_cal"
+        # Date inputs
+        col_start, col_end = st.columns(2)
+        with col_start:
+            default_start_2 = st.session_state.get('start_date_2', f"{max_date.year}-01-01")
+            start_str_2 = st.text_input(
+                "Start date (YYYY-MM-DD)",
+                value=default_start_2,
+                key="start_manual_p2"
             )
-            if len(date_range_2) == 2:
-                start_date_2, end_date_2 = date_range_2
-            else:
-                start_date_2 = date_range_2[0]
-                end_date_2 = date_range_2[0]
-        else:
-            # Manual input
-            col_start, col_end = st.columns(2)
-            with col_start:
-                start_str_2 = st.text_input(
-                    "Start date (YYYY-MM-DD)",
-                    value=(max_date - pd.Timedelta(days=30)).strftime("%Y-%m-%d"),
-                    key="start_manual_p2"
-                )
-                start_date_2 = parse_date_input(start_str_2)
-                if start_date_2 is None:
-                    st.error("Invalid date format. Use YYYY-MM-DD")
-                    st.stop()
-            
-            with col_end:
-                end_str_2 = st.text_input(
-                    "End date (YYYY-MM-DD)",
-                    value=max_date.strftime("%Y-%m-%d"),
-                    key="end_manual_p2"
-                )
-                end_date_2 = parse_date_input(end_str_2)
-                if end_date_2 is None:
-                    st.error("Invalid date format. Use YYYY-MM-DD")
-                    st.stop()
+            start_date_2 = parse_date_input(start_str_2)
+            if start_date_2 is None:
+                st.error("Invalid date format. Use YYYY-MM-DD")
+                st.stop()
         
-        st.caption(f"Selected: {start_date_2} to {end_date_2}")
+        with col_end:
+            default_end_2 = st.session_state.get('end_date_2', f"{max_date.year}-12-31")
+            end_str_2 = st.text_input(
+                "End date (YYYY-MM-DD)",
+                value=default_end_2,
+                key="end_manual_p2"
+            )
+            end_date_2 = parse_date_input(end_str_2)
+            if end_date_2 is None:
+                st.error("Invalid date format. Use YYYY-MM-DD")
+                st.stop()
+        
+        st.caption(f"📊 Selected: {start_date_2} to {end_date_2}")
     
     # Validate date ranges
     if start_date_1 > end_date_1:
@@ -352,103 +774,133 @@ if file:
         st.stop()
     
     # Filter data by periods
-    df1 = df[(pd.to_datetime(df[col_fecha]) >= pd.to_datetime(start_date_1)) & 
-             (pd.to_datetime(df[col_fecha]) <= pd.to_datetime(end_date_1))].copy()
+    with st.spinner("🔄 Filtering data by periods..."):
+        df1 = df[(pd.to_datetime(df[col_fecha]) >= pd.to_datetime(start_date_1)) & 
+                 (pd.to_datetime(df[col_fecha]) <= pd.to_datetime(end_date_1))].copy()
+        
+        df2 = df[(pd.to_datetime(df[col_fecha]) >= pd.to_datetime(start_date_2)) & 
+                 (pd.to_datetime(df[col_fecha]) <= pd.to_datetime(end_date_2))].copy()
     
-    df2 = df[(pd.to_datetime(df[col_fecha]) >= pd.to_datetime(start_date_2)) & 
-             (pd.to_datetime(df[col_fecha]) <= pd.to_datetime(end_date_2))].copy()
+    logger.info(f"Period 1: {len(df1)} records, Period 2: {len(df2)} records")
     
-    st.success(f"✅ **Periods defined:** {len(df1)} records in {nombre_periodo_1}, {len(df2)} records in {nombre_periodo_2}")
+    st.success(f"✅ **Periods defined:** {len(df1):,} records in {nombre_periodo_1}, {len(df2):,} records in {nombre_periodo_2}")
     
     # Warning if periods overlap
     if not (end_date_1 < start_date_2 or end_date_2 < start_date_1):
         st.warning("⚠️ **Warning:** The selected periods overlap. This may affect the comparison results.")
+        logger.warning("Periods overlap detected")
     
-    # =============================================================================
-    # STEP 4: FILTERS
-    # =============================================================================
+    # =========================================================================
+    # APPLY FILTERS FROM SIDEBAR
+    # =========================================================================
     st.markdown("---")
-    st.markdown("## 🎯 STEP 4: Apply Filters")
+    st.markdown('<div class="section-header">🎯 Filtering Data</div>', unsafe_allow_html=True)
     
-    # Product type filter
-    st.markdown("### 🏷️ Product Type Filter")
-    tipos_disponibles = sorted(set(df1[col_tipo].dropna().unique()) | set(df2[col_tipo].dropna().unique()))
-    
-    st.info(f"💡 **Available types:** {', '.join(tipos_disponibles)}")
-    tipos_seleccionados = st.multiselect(
-        "Select product types to include in the analysis", 
-        tipos_disponibles, 
-        default=tipos_disponibles,
-        help="You can exclude types like 'Rental', 'Sample', etc."
-    )
-    
-    if not tipos_seleccionados:
-        st.warning("⚠️ You must select at least one product type")
-        st.stop()
-    
+    # Apply product type filter from sidebar
     df1_filtrado = df1[df1[col_tipo].isin(tipos_seleccionados)].copy()
     df2_filtrado = df2[df2[col_tipo].isin(tipos_seleccionados)].copy()
     
-    st.success(f"✅ Filters applied: {len(df1_filtrado)} records in {nombre_periodo_1}, {len(df2_filtrado)} records in {nombre_periodo_2}")
-
-    # Filter by Product/Service Name
-    st.markdown("### 🔍 Filter by Product/Service Name (Optional)")
-
-    search_text = st.text_input(
-        "Search in ItemIdAndName (leave empty to include all)",
-        value="",
-        placeholder="e.g., 'pump', 'valve', 'maintenance'...",
-        help="Filter products/services that contain this text (case insensitive)"
-    )
-
-    if search_text:
-        # Apply filter
+    # Apply set filter from sidebar
+    df1_filtrado = df1_filtrado[df1_filtrado[col_set].isin(selected_sets)]
+    df2_filtrado = df2_filtrado[df2_filtrado[col_set].isin(selected_sets)]
+    
+    # Apply sales representative filter from sidebar
+    if selected_reps and len(selected_reps) > 0:
+        df1_filtrado = df1_filtrado[df1_filtrado[col_sales_rep].isin(selected_reps)]
+        df2_filtrado = df2_filtrado[df2_filtrado[col_sales_rep].isin(selected_reps)]
+        logger.info(f"Sales rep filter applied: {selected_reps}")
+    
+    # Apply search filter from sidebar (quick filters or manual search)
+    if st.session_state.selected_quick_filters:
+        quick_mode = st.session_state.get('quick_filter_mode', 'AND')
+        if quick_mode == 'AND':
+            mask1 = pd.Series([True] * len(df1_filtrado), index=df1_filtrado.index)
+            mask2 = pd.Series([True] * len(df2_filtrado), index=df2_filtrado.index)
+            for keyword in st.session_state.selected_quick_filters:
+                mask1 &= df1_filtrado[col_producto].str.contains(keyword, case=False, na=False)
+                mask2 &= df2_filtrado[col_producto].str.contains(keyword, case=False, na=False)
+            df1_filtrado = df1_filtrado[mask1]
+            df2_filtrado = df2_filtrado[mask2]
+        else:  # OR
+            mask1 = pd.Series([False] * len(df1_filtrado), index=df1_filtrado.index)
+            mask2 = pd.Series([False] * len(df2_filtrado), index=df2_filtrado.index)
+            for keyword in st.session_state.selected_quick_filters:
+                mask1 |= df1_filtrado[col_producto].str.contains(keyword, case=False, na=False)
+                mask2 |= df2_filtrado[col_producto].str.contains(keyword, case=False, na=False)
+            df1_filtrado = df1_filtrado[mask1]
+            df2_filtrado = df2_filtrado[mask2]
+        logger.info(f"Quick filters applied ({quick_mode}): {st.session_state.selected_quick_filters}")
+    elif search_text:
         df1_filtrado = df1_filtrado[df1_filtrado[col_producto].str.contains(search_text, case=False, na=False)]
         df2_filtrado = df2_filtrado[df2_filtrado[col_producto].str.contains(search_text, case=False, na=False)]
-        
-        st.success(f"✅ Name filter applied: {len(df1_filtrado)} records in {nombre_periodo_1}, {len(df2_filtrado)} records in {nombre_periodo_2}")
-        
-        if len(df1_filtrado) == 0 or len(df2_filtrado) == 0:
-            st.warning("⚠️ No records found with that search term. Try a different keyword.")
-            st.stop()
-    else:
-        st.info("ℹ️ No name filter applied - showing all products")
+        logger.info(f"Manual search filter applied: '{search_text}'")
     
-    # =============================================================================
+    # Apply customer filter from sidebar
+    customer_search = st.session_state.get('customer_filter', '')
+    if customer_search:
+        df1_filtrado = df1_filtrado[df1_filtrado[col_cliente].str.contains(customer_search, case=False, na=False)]
+        df2_filtrado = df2_filtrado[df2_filtrado[col_cliente].str.contains(customer_search, case=False, na=False)]
+        logger.info(f"Customer filter applied: '{customer_search}'")
+    
+    # Show filtering summary
+    st.success(f"✅ **Filters applied:** {len(df1_filtrado):,} records in {nombre_periodo_1}, {len(df2_filtrado):,} records in {nombre_periodo_2}")
+    
+    if len(df1_filtrado) == 0 or len(df2_filtrado) == 0:
+        st.warning("⚠️ No records found with the selected filters. Try adjusting your filters.")
+        st.stop()
+    
+    # =========================================================================
     # DATA PROCESSING
-    # =============================================================================
+    # =========================================================================
     
     # Convert quantity and amount to numeric
-    df1_filtrado[col_cantidad] = pd.to_numeric(df1_filtrado[col_cantidad], errors='coerce')
-    df1_filtrado[col_precio] = pd.to_numeric(df1_filtrado[col_precio], errors='coerce')
-    df2_filtrado[col_cantidad] = pd.to_numeric(df2_filtrado[col_cantidad], errors='coerce')
-    df2_filtrado[col_precio] = pd.to_numeric(df2_filtrado[col_precio], errors='coerce')
-    
-    # Amount is already the total
-    df1_filtrado["Amount"] = df1_filtrado[col_precio]
-    df2_filtrado["Amount"] = df2_filtrado[col_precio]
+    with st.spinner("🔄 Processing numerical data..."):
+        df1_filtrado[col_cantidad] = pd.to_numeric(df1_filtrado[col_cantidad], errors='coerce')
+        df1_filtrado[col_precio] = pd.to_numeric(df1_filtrado[col_precio], errors='coerce')
+        df2_filtrado[col_cantidad] = pd.to_numeric(df2_filtrado[col_cantidad], errors='coerce')
+        df2_filtrado[col_precio] = pd.to_numeric(df2_filtrado[col_precio], errors='coerce')
+        
+        # Amount is already the total
+        df1_filtrado["Amount"] = df1_filtrado[col_precio]
+        df2_filtrado["Amount"] = df2_filtrado[col_precio]
     
     # Group by customer, product, sales representative, set and productline
     with st.spinner("🔄 Processing data and generating comparison..."):
+        progress_bar = st.progress(0)
+        
+        # Group period 1
+        progress_bar.progress(25)
         grouped_1 = df1_filtrado.groupby([col_cliente, col_producto, col_sales_rep, col_set, col_productline, col_tipo]).agg({
             col_cantidad: "sum",
             "Amount": "sum"
         }).rename(columns={col_cantidad: f"Quantity {nombre_periodo_1}", "Amount": f"Amount {nombre_periodo_1}"})
         
+        # Group period 2
+        progress_bar.progress(50)
         grouped_2 = df2_filtrado.groupby([col_cliente, col_producto, col_sales_rep, col_set, col_productline, col_tipo]).agg({
             col_cantidad: "sum",
             "Amount": "sum"
         }).rename(columns={col_cantidad: f"Quantity {nombre_periodo_2}", "Amount": f"Amount {nombre_periodo_2}"})
         
+        # Create comparison
+        progress_bar.progress(75)
         comparativa = pd.merge(grouped_1, grouped_2, how="outer", left_index=True, right_index=True).fillna(0)
         comparativa["Quantity Difference"] = comparativa[f"Quantity {nombre_periodo_2}"] - comparativa[f"Quantity {nombre_periodo_1}"]
         comparativa["Amount Difference"] = comparativa[f"Amount {nombre_periodo_2}"] - comparativa[f"Amount {nombre_periodo_1}"]
+        
+        # Calculate growth percentage
+        comparativa["Growth %"] = ((comparativa[f"Amount {nombre_periodo_2}"] - comparativa[f"Amount {nombre_periodo_1}"]) / 
+                                   comparativa[f"Amount {nombre_periodo_1}"] * 100)
+        comparativa["Growth %"] = comparativa["Growth %"].replace([float('inf'), -float('inf')], 0)
+        
+        progress_bar.progress(100)
+        logger.info(f"Comparison generated: {len(comparativa)} unique records")
     
-    # =============================================================================
+    # =========================================================================
     # STEP 5: RESULTS AND METRICS
-    # =============================================================================
+    # =========================================================================
     st.markdown("---")
-    st.markdown("## 📊 STEP 5: Analysis Results")
+    st.markdown('<div class="section-header">📊 Analysis Results</div>', unsafe_allow_html=True)
     
     # Show comparison summary
     st.markdown("### 💰 Financial Summary")
@@ -489,25 +941,25 @@ if file:
     with col1:
         st.metric(
             "✅ Common Records", 
-            registros_comunes,
+            f"{registros_comunes:,}",
             help="Sales appearing in both periods (recurring customers)"
         )
     with col2:
         st.metric(
             f"🔴 Only in {nombre_periodo_1}", 
-            registros_solo_p1,
+            f"{registros_solo_p1:,}",
             help="Sales that did NOT repeat (lost customers)"
         )
     with col3:
         st.metric(
             f"🟢 Only in {nombre_periodo_2}", 
-            registros_solo_p2,
+            f"{registros_solo_p2:,}",
             help="New sales (gained customers)"
         )
     with col4:
         st.metric(
             "📊 Total Records", 
-            len(comparativa),
+            f"{len(comparativa):,}",
             help="Total unique customer-product combinations"
         )
     
@@ -538,19 +990,330 @@ if file:
             help="% of new sales in P2. Indicates growth"
         )
     
+    # =========================================================================
+    # COMPARATIVE VISUALIZATIONS
+    # =========================================================================
+    st.markdown("---")
+    st.markdown('<div class="section-header">📊 Comparative Analysis</div>', unsafe_allow_html=True)
+    
+    # Total comparison at top
+    st.markdown("### 💰 Overall Comparison")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric(f"Total {nombre_periodo_1}", f"€{total_periodo_1:,.2f}")
+    with col2:
+        st.metric(f"Total {nombre_periodo_2}", f"€{total_periodo_2:,.2f}", delta=f"€{diferencia_total:,.2f}")
+    
+    st.markdown("---")
+    
+    # Comparison by Sales Representative
+    st.markdown("### 👤 Comparison by Sales Representative")
+    rep_comparison = pd.DataFrame({
+        nombre_periodo_1: df1_filtrado.groupby(col_sales_rep)[col_precio].sum(),
+        nombre_periodo_2: df2_filtrado.groupby(col_sales_rep)[col_precio].sum()
+    }).fillna(0).reset_index()
+    rep_comparison = rep_comparison.sort_values(nombre_periodo_2, ascending=True)
+    
+    fig_rep = go.Figure()
+    fig_rep.add_trace(go.Bar(
+        name=nombre_periodo_1,
+        y=rep_comparison[col_sales_rep],
+        x=rep_comparison[nombre_periodo_1],
+        orientation='h',
+        marker=dict(color='#FF6B6B'),
+        text=rep_comparison[nombre_periodo_1].apply(lambda x: f'€{x:,.0f}'),
+        textposition='auto',
+    ))
+    fig_rep.add_trace(go.Bar(
+        name=nombre_periodo_2,
+        y=rep_comparison[col_sales_rep],
+        x=rep_comparison[nombre_periodo_2],
+        orientation='h',
+        marker=dict(color='#4ECDC4'),
+        text=rep_comparison[nombre_periodo_2].apply(lambda x: f'€{x:,.0f}'),
+        textposition='auto',
+    ))
+    fig_rep.update_layout(
+        barmode='group',
+        height=max(400, len(rep_comparison) * 40),
+        xaxis_title="Sales (€)",
+        yaxis_title="",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+    )
+    st.plotly_chart(fig_rep, use_container_width=True)
+    
+    st.markdown("---")
+    
+    # Comparison by Product Type
+    st.markdown("### 🏷️ Comparison by Product Type")
+    type_comparison = pd.DataFrame({
+        nombre_periodo_1: df1_filtrado.groupby(col_tipo)[col_precio].sum(),
+        nombre_periodo_2: df2_filtrado.groupby(col_tipo)[col_precio].sum()
+    }).fillna(0).reset_index()
+    type_comparison = type_comparison.sort_values(nombre_periodo_2, ascending=True)
+    
+    fig_type = go.Figure()
+    fig_type.add_trace(go.Bar(
+        name=nombre_periodo_1,
+        y=type_comparison[col_tipo],
+        x=type_comparison[nombre_periodo_1],
+        orientation='h',
+        marker=dict(color='#FF6B6B'),
+        text=type_comparison[nombre_periodo_1].apply(lambda x: f'€{x:,.0f}'),
+        textposition='auto',
+    ))
+    fig_type.add_trace(go.Bar(
+        name=nombre_periodo_2,
+        y=type_comparison[col_tipo],
+        x=type_comparison[nombre_periodo_2],
+        orientation='h',
+        marker=dict(color='#4ECDC4'),
+        text=type_comparison[nombre_periodo_2].apply(lambda x: f'€{x:,.0f}'),
+        textposition='auto',
+    ))
+    fig_type.update_layout(
+        barmode='group',
+        height=max(400, len(type_comparison) * 40),
+        xaxis_title="Sales (€)",
+        yaxis_title="",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+    )
+    st.plotly_chart(fig_type, use_container_width=True)
+    
+    st.markdown("---")
+    
+    # Comparison by Set
+    st.markdown("### 📦 Comparison by Set")
+    set_comparison = pd.DataFrame({
+        nombre_periodo_1: df1_filtrado.groupby(col_set)[col_precio].sum(),
+        nombre_periodo_2: df2_filtrado.groupby(col_set)[col_precio].sum()
+    }).fillna(0).reset_index()
+    set_comparison = set_comparison.sort_values(nombre_periodo_2, ascending=True)
+    
+    fig_set = go.Figure()
+    fig_set.add_trace(go.Bar(
+        name=nombre_periodo_1,
+        y=set_comparison[col_set],
+        x=set_comparison[nombre_periodo_1],
+        orientation='h',
+        marker=dict(color='#FF6B6B'),
+        text=set_comparison[nombre_periodo_1].apply(lambda x: f'€{x:,.0f}'),
+        textposition='auto',
+    ))
+    fig_set.add_trace(go.Bar(
+        name=nombre_periodo_2,
+        y=set_comparison[col_set],
+        x=set_comparison[nombre_periodo_2],
+        orientation='h',
+        marker=dict(color='#4ECDC4'),
+        text=set_comparison[nombre_periodo_2].apply(lambda x: f'€{x:,.0f}'),
+        textposition='auto',
+    ))
+    fig_set.update_layout(
+        barmode='group',
+        height=max(400, len(set_comparison) * 50),
+        xaxis_title="Sales (€)",
+        yaxis_title="",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+    )
+    st.plotly_chart(fig_set, use_container_width=True)
+    
+    # =========================================================================
+    # PERFORMANCE OVER TIME (Month-by-Month: Jan P1 vs Jan P2, etc.)
+    # =========================================================================
+    st.markdown("---")
+    st.markdown('<div class="section-header">📈 Performance Over Time</div>', unsafe_allow_html=True)
+
+    df1m = df1_filtrado.copy()
+    df2m = df2_filtrado.copy()
+
+    df1m["_DateDT"] = pd.to_datetime(df1m[col_fecha], errors="coerce")
+    df2m["_DateDT"] = pd.to_datetime(df2m[col_fecha], errors="coerce")
+    df1m = df1m.dropna(subset=["_DateDT"])
+    df2m = df2m.dropna(subset=["_DateDT"])
+
+    # Mes del año 1..12
+    df1m["MonthNum"] = df1m["_DateDT"].dt.month
+    df2m["MonthNum"] = df2m["_DateDT"].dt.month
+
+    monthly_p1 = df1m.groupby("MonthNum")[col_precio].sum().reset_index()
+    monthly_p1.columns = ["MonthNum", nombre_periodo_1]
+
+    monthly_p2 = df2m.groupby("MonthNum")[col_precio].sum().reset_index()
+    monthly_p2.columns = ["MonthNum", nombre_periodo_2]
+
+    monthly_combined = pd.merge(monthly_p1, monthly_p2, on="MonthNum", how="outer").fillna(0)
+    monthly_combined = monthly_combined.sort_values("MonthNum")
+
+    # Etiquetas de meses
+    month_labels_full = {
+        1: "January", 2: "February", 3: "March", 4: "April",
+        5: "May", 6: "June", 7: "July", 8: "August",
+        9: "September", 10: "October", 11: "November", 12: "December"
+    }
+    monthly_combined["MonthLabel"] = monthly_combined["MonthNum"].map(month_labels_full)
+
+    fig_time = go.Figure()
+
+    fig_time.add_trace(go.Bar(
+        name=nombre_periodo_1,
+        x=monthly_combined["MonthLabel"],
+        y=monthly_combined[nombre_periodo_1],
+        marker=dict(color="#FF6B6B"),
+        text=monthly_combined[nombre_periodo_1].apply(lambda x: f"€{x:,.0f}" if x > 0 else ""),
+        textposition="outside",
+    ))
+
+    fig_time.add_trace(go.Bar(
+        name=nombre_periodo_2,
+        x=monthly_combined["MonthLabel"],
+        y=monthly_combined[nombre_periodo_2],
+        marker=dict(color="#4ECDC4"),
+        text=monthly_combined[nombre_periodo_2].apply(lambda x: f"€{x:,.0f}" if x > 0 else ""),
+        textposition="outside",
+    ))
+
+    fig_time.update_layout(
+        title="Month-by-Month Sales (Jan vs Jan, Feb vs Feb, ...)",
+        barmode="group",
+        height=520,
+        xaxis_title="",
+        yaxis_title="Sales (€)",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        margin=dict(t=70, r=10, b=10, l=10),
+    )
+
+    st.plotly_chart(fig_time, use_container_width=True)
+
+
+    # =========================================================================
+    # TOP 10 ANALYSIS
+    # =========================================================================
+    st.markdown("---")
+    st.markdown('<div class="section-header">🏆 Top 10 Analysis</div>', unsafe_allow_html=True)
+    
+    tab1, tab2, tab3, tab4 = st.tabs(["📊 By Customer", "📦 By Product", "📈 By Growth", "👤 By Sales Rep"])
+    
+    with tab1:
+        st.markdown("#### Top 10 Customers by Sales Volume")
+        top_clientes = comparativa.groupby(level=0)[[f"Amount {nombre_periodo_1}", 
+                                                       f"Amount {nombre_periodo_2}"]].sum()
+        top_clientes['Total'] = top_clientes[f"Amount {nombre_periodo_1}"] + top_clientes[f"Amount {nombre_periodo_2}"]
+        top_clientes = top_clientes.sort_values('Total', ascending=False).head(10)
+        
+        # Format for display
+        top_clientes_display = top_clientes.copy()
+        for col in top_clientes_display.columns:
+            top_clientes_display[col] = top_clientes_display[col].apply(lambda x: f"€{x:,.2f}")
+        
+        st.dataframe(top_clientes_display, use_container_width=True)
+    
+    with tab2:
+        st.markdown("#### Top 10 Products by Sales Volume")
+        top_productos = comparativa.groupby(level=1)[[f"Amount {nombre_periodo_1}", 
+                                                        f"Amount {nombre_periodo_2}"]].sum()
+        top_productos['Total'] = top_productos[f"Amount {nombre_periodo_1}"] + top_productos[f"Amount {nombre_periodo_2}"]
+        top_productos = top_productos.sort_values('Total', ascending=False).head(10)
+        
+        # Format for display
+        top_productos_display = top_productos.copy()
+        for col in top_productos_display.columns:
+            top_productos_display[col] = top_productos_display[col].apply(lambda x: f"€{x:,.2f}")
+        
+        st.dataframe(top_productos_display, use_container_width=True)
+    
+    with tab3:
+        st.markdown("#### Top 10 by Highest Growth")
+        crecimiento = comparativa.copy()
+        crecimiento = crecimiento[crecimiento[f"Amount {nombre_periodo_1}"] > 0]  # Only items that existed in P1
+        top_crecimiento = crecimiento.nlargest(10, 'Amount Difference').reset_index()
+        
+        # Select relevant columns
+        display_cols = [col_cliente, col_producto, f"Amount {nombre_periodo_1}", 
+                       f"Amount {nombre_periodo_2}", 'Amount Difference', 'Growth %']
+        top_crecimiento_display = top_crecimiento[display_cols].copy()
+        
+        # Format monetary columns
+        for col in [f"Amount {nombre_periodo_1}", f"Amount {nombre_periodo_2}", 'Amount Difference']:
+            top_crecimiento_display[col] = top_crecimiento_display[col].apply(lambda x: f"€{x:,.2f}")
+        top_crecimiento_display['Growth %'] = top_crecimiento_display['Growth %'].apply(lambda x: f"{x:.1f}%")
+        
+        st.dataframe(top_crecimiento_display, use_container_width=True)
+    
+    with tab4:
+        st.markdown("#### Performance by Sales Representative")
+        rep_analysis = df1_filtrado.groupby(col_sales_rep)[col_precio].sum().to_frame(nombre_periodo_1)
+        rep_analysis[nombre_periodo_2] = df2_filtrado.groupby(col_sales_rep)[col_precio].sum()
+        rep_analysis = rep_analysis.fillna(0)
+        rep_analysis['Difference'] = rep_analysis[nombre_periodo_2] - rep_analysis[nombre_periodo_1]
+        rep_analysis['Growth %'] = ((rep_analysis[nombre_periodo_2] - rep_analysis[nombre_periodo_1]) / 
+                                    rep_analysis[nombre_periodo_1] * 100)
+        rep_analysis = rep_analysis.replace([float('inf'), -float('inf')], 0)
+        rep_analysis = rep_analysis.sort_values('Difference', ascending=False)
+        
+        # Format for display
+        rep_analysis_display = rep_analysis.copy()
+        for col in [nombre_periodo_1, nombre_periodo_2, 'Difference']:
+            rep_analysis_display[col] = rep_analysis_display[col].apply(lambda x: f"€{x:,.2f}")
+        rep_analysis_display['Growth %'] = rep_analysis_display['Growth %'].apply(lambda x: f"{x:.1f}%")
+        
+        st.dataframe(rep_analysis_display, use_container_width=True)
+    
     # Preview of comparison
-    st.markdown("### 👀 Comparison Preview (first 20 rows)")
+    st.markdown("---")
+    st.markdown("### 👀 Full Comparison Preview (first 20 rows)")
+    preview_df = comparativa.reset_index().head(20).copy()
+    
+    # Format monetary columns for preview
+    for col in preview_df.columns:
+        if 'Amount' in col or 'Difference' in col:
+            if col != 'Growth %':
+                preview_df[col] = preview_df[col].apply(lambda x: f"€{x:,.2f}" if pd.notnull(x) else "€0.00")
+    
+    if 'Growth %' in preview_df.columns:
+        preview_df['Growth %'] = preview_df['Growth %'].apply(lambda x: f"{x:.1f}%" if pd.notnull(x) else "0.0%")
+    
     st.dataframe(
-        comparativa.reset_index().head(20), 
+        preview_df, 
         use_container_width=True,
         height=400
     )
     
-    # =============================================================================
+
+
+
+    # =========================================================================
+# =========================================================================
     # STEP 6: DOWNLOAD
-    # =============================================================================
+    # =========================================================================
     st.markdown("---")
-    st.markdown("## 📥 STEP 6: Download Results")
+    st.markdown('<div class="section-header">📥 Download Results</div>', unsafe_allow_html=True)
+    
+    # Prepare configuration for reproducibility
+    config_info = {
+        'Source File': uploaded_file.name,
+        'Analysis Date': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        'Period 1 Name': nombre_periodo_1,
+        'Period 1 Start': str(start_date_1),
+        'Period 1 End': str(end_date_1),
+        'Period 2 Name': nombre_periodo_2,
+        'Period 2 Start': str(start_date_2),
+        'Period 2 End': str(end_date_2),
+        'Product Types': ', '.join(tipos_seleccionados),
+        'Product Name Filter': search_text if search_text else 'None',
+        'Sales Rep Filter': ', '.join(selected_reps) if 'selected_reps' in locals() and selected_reps else 'All',
+        'Total Records P1': len(df1_filtrado),
+        'Total Records P2': len(df2_filtrado),
+        'Total Sales P1': f"€{total_periodo_1:,.2f}",
+        'Total Sales P2': f"€{total_periodo_2:,.2f}",
+        'Difference': f"€{diferencia_total:,.2f}",
+        'Growth %': f"{porcentaje_cambio:.1f}%"
+    }
+    
+    # =========================================================================
+    # EXCEL DOWNLOAD
+    # =========================================================================
+    st.markdown("### 📊 Excel Report (Complete Analysis)")
     
     st.info("🔧 Generating Excel file with all analysis sheets...")
     
@@ -558,99 +1321,219 @@ if file:
     with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
         tmp_path = tmp_file.name
     
-    # Create Excel
-    with pd.ExcelWriter(tmp_path, engine='openpyxl') as writer:
-        # Main comparison sheet
-        comparativa_out = comparativa.reset_index()
-        comparativa_out.to_excel(writer, index=False, sheet_name='Comparison')
+    # Create Excel with progress
+    with st.spinner("📊 Creating Excel workbook..."):
+        progress_bar = st.progress(0)
         
-        # Complete original data
-        df1_filtrado_copy = df1_filtrado.copy()
-        df1_filtrado_copy['Source'] = nombre_periodo_1
-        df2_filtrado_copy = df2_filtrado.copy()
-        df2_filtrado_copy['Source'] = nombre_periodo_2
-        
-        datos_originales = pd.concat([df1_filtrado_copy, df2_filtrado_copy], ignore_index=True)
-        datos_originales.to_excel(writer, index=False, sheet_name='Original Data')
-        
-        # Unique services in each period and common ones
-        keys_1 = set(df1_filtrado[[col_cliente, col_producto, col_sales_rep, col_set, col_productline, col_tipo]].apply(tuple, axis=1))
-        keys_2 = set(df2_filtrado[[col_cliente, col_producto, col_sales_rep, col_set, col_productline, col_tipo]].apply(tuple, axis=1))
-        
-        unicos_1 = keys_1 - keys_2
-        unicos_2 = keys_2 - keys_1
-        comunes = keys_1 & keys_2
-        
-        # DataFrames of unique and common
-        if unicos_1:
-            df_unicos_1 = df1_filtrado[df1_filtrado[[col_cliente, col_producto, col_sales_rep, col_set, col_productline, col_tipo]].apply(tuple, axis=1).isin(unicos_1)]
-            df_unicos_1.to_excel(writer, index=False, sheet_name=f'Only in {nombre_periodo_1}'[:31])
-        
-        if unicos_2:
-            df_unicos_2 = df2_filtrado[df2_filtrado[[col_cliente, col_producto, col_sales_rep, col_set, col_productline, col_tipo]].apply(tuple, axis=1).isin(unicos_2)]
-            df_unicos_2.to_excel(writer, index=False, sheet_name=f'Only in {nombre_periodo_2}'[:31])
-        
-        if comunes:
-            df_comunes_1 = df1_filtrado[df1_filtrado[[col_cliente, col_producto, col_sales_rep, col_set, col_productline, col_tipo]].apply(tuple, axis=1).isin(comunes)].copy()
-            df_comunes_2 = df2_filtrado[df2_filtrado[[col_cliente, col_producto, col_sales_rep, col_set, col_productline, col_tipo]].apply(tuple, axis=1).isin(comunes)].copy()
+        with pd.ExcelWriter(tmp_path, engine='openpyxl') as writer:
+            # Configuration sheet
+            progress_bar.progress(10)
+            pd.DataFrame([config_info]).T.reset_index().rename(columns={'index': 'Parameter', 0: 'Value'}).to_excel(
+                writer, index=False, sheet_name='Configuration'
+            )
             
-            df_comunes_1['Period'] = nombre_periodo_1
-            df_comunes_2['Period'] = nombre_periodo_2
+            # Main comparison sheet
+            progress_bar.progress(20)
+            comparativa_out = comparativa.reset_index()
+            comparativa_out.to_excel(writer, index=False, sheet_name='Comparison')
             
-            df_comunes_combinado = pd.concat([df_comunes_1, df_comunes_2], ignore_index=True)
-            df_comunes_combinado.to_excel(writer, index=False, sheet_name='Common in both')
+            # Complete original data
+            progress_bar.progress(40)
+            df1_filtrado_copy = df1_filtrado.copy()
+            df1_filtrado_copy['Source'] = nombre_periodo_1
+            df2_filtrado_copy = df2_filtrado.copy()
+            df2_filtrado_copy['Source'] = nombre_periodo_2
+            
+            datos_originales = pd.concat([df1_filtrado_copy, df2_filtrado_copy], ignore_index=True)
+            datos_originales.to_excel(writer, index=False, sheet_name='Original Data')
+            
+            # Unique services in each period and common ones
+            progress_bar.progress(60)
+            keys_1 = set(df1_filtrado[[col_cliente, col_producto, col_sales_rep, col_set, col_productline, col_tipo]].apply(tuple, axis=1))
+            keys_2 = set(df2_filtrado[[col_cliente, col_producto, col_sales_rep, col_set, col_productline, col_tipo]].apply(tuple, axis=1))
+            
+            unicos_1 = keys_1 - keys_2
+            unicos_2 = keys_2 - keys_1
+            comunes = keys_1 & keys_2
+            
+            # DataFrames of unique and common
+            progress_bar.progress(70)
+            if unicos_1:
+                df_unicos_1 = df1_filtrado[df1_filtrado[[col_cliente, col_producto, col_sales_rep, col_set, col_productline, col_tipo]].apply(tuple, axis=1).isin(unicos_1)]
+                df_unicos_1.to_excel(writer, index=False, sheet_name=f'Only in {nombre_periodo_1}'[:31])
+            
+            progress_bar.progress(80)
+            if unicos_2:
+                df_unicos_2 = df2_filtrado[df2_filtrado[[col_cliente, col_producto, col_sales_rep, col_set, col_productline, col_tipo]].apply(tuple, axis=1).isin(unicos_2)]
+                df_unicos_2.to_excel(writer, index=False, sheet_name=f'Only in {nombre_periodo_2}'[:31])
+            
+            progress_bar.progress(90)
+            if comunes:
+                df_comunes_1 = df1_filtrado[df1_filtrado[[col_cliente, col_producto, col_sales_rep, col_set, col_productline, col_tipo]].apply(tuple, axis=1).isin(comunes)].copy()
+                df_comunes_2 = df2_filtrado[df2_filtrado[[col_cliente, col_producto, col_sales_rep, col_set, col_productline, col_tipo]].apply(tuple, axis=1).isin(comunes)].copy()
+                
+                df_comunes_1['Period'] = nombre_periodo_1
+                df_comunes_2['Period'] = nombre_periodo_2
+                
+                df_comunes_combinado = pd.concat([df_comunes_1, df_comunes_2], ignore_index=True)
+                df_comunes_combinado.to_excel(writer, index=False, sheet_name='Common in both')
+            
+            progress_bar.progress(100)
+    
+    logger.info("Excel file created successfully")
     
     # Read final file
     with open(tmp_path, 'rb') as f:
-        output = BytesIO(f.read())
+        output_excel = BytesIO(f.read())
     
     # Clean up
     os.unlink(tmp_path)
     
     # Filename with date
     fecha_actual = datetime.now().strftime("%Y%m%d")
-    nombre_archivo = f"comparison_{nombre_periodo_1}_vs_{nombre_periodo_2}_{fecha_actual}.xlsx"
+    nombre_archivo_excel = f"comparison_{nombre_periodo_1}_vs_{nombre_periodo_2}_{fecha_actual}.xlsx"
     
     st.success("✅ **Excel file generated successfully**")
     
     # Information about content
-    with st.expander("📋 What does the Excel file contain?", expanded=True):
+    with st.expander("📋 What does the Excel file contain?", expanded=False):
         st.markdown(f"""
-        The file contains **5 sheets** with different analyses:
+        The file contains **6 sheets** with different analyses:
         
-        1. **📊 Comparison** - Complete table with all customer-product combinations and their differences
-        2. **📄 Original Data** - All original transactions from both periods (with 'Source' column)
-        3. **🔴 Only in {nombre_periodo_1}** - {registros_solo_p1} records that do NOT appear in {nombre_periodo_2} (lost customers)
-        4. **🟢 Only in {nombre_periodo_2}** - {registros_solo_p2} new records (gained customers)
-        5. **✅ Common in both** - {registros_comunes} records appearing in both periods (loyal customers)
+        1. **⚙️ Configuration** - Analysis parameters for reproducibility
+        2. **📊 Comparison** - Complete table with all customer-product combinations and their differences
+        3. **📄 Original Data** - All original transactions from both periods (with 'Source' column)
+        4. **🔴 Only in {nombre_periodo_1}** - {registros_solo_p1:,} records that do NOT appear in {nombre_periodo_2} (lost customers)
+        5. **🟢 Only in {nombre_periodo_2}** - {registros_solo_p2:,} new records (gained customers)
+        6. **✅ Common in both** - {registros_comunes:,} records appearing in both periods (loyal customers)
         
         ### 💡 Recommended uses:
-        - **Sheet 3 (Only in P1):** Identify customers to recover or non-renewed services
-        - **Sheet 4 (Only in P2):** Celebrate new acquisitions and expansion
-        - **Sheet 5 (Common):** Analyze growth in the loyal base
+        - **Sheet 1 (Configuration):** Review analysis parameters and reproduce results
+        - **Sheet 4 (Only in P1):** Identify customers to recover or non-renewed services
+        - **Sheet 5 (Only in P2):** Celebrate new acquisitions and expansion
+        - **Sheet 6 (Common):** Analyze growth in the loyal base
         """)
     
-    # Highlighted download button
-    st.download_button(
-        label="📥 DOWNLOAD COMPLETE EXCEL FILE",
-        data=output.getvalue(),
-        file_name=nombre_archivo,
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        use_container_width=True
-    )
+    # Download buttons
+    col1, col2, col3 = st.columns(3)
     
+    with col1:
+        # Excel download
+        st.download_button(
+            label="📥 DOWNLOAD EXCEL FILE",
+            data=output_excel.getvalue(),
+            file_name=nombre_archivo_excel,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
     
-    st.success(f"🎉 **Analysis completed!** File ready to download: `{nombre_archivo}`")
-
-else:
-    # Message when no file is loaded
-    st.info("👆 **Start by uploading your sales file in the section above**")
+    with col2:
+        # CSV download (comparison only)
+        nombre_archivo_csv = f"comparison_{nombre_periodo_1}_vs_{nombre_periodo_2}_{fecha_actual}.csv"
+        csv_output = comparativa.reset_index().to_csv(index=False).encode('utf-8')
+        
+        st.download_button(
+            label="📥 DOWNLOAD CSV",
+            data=csv_output,
+            file_name=nombre_archivo_csv,
+            mime="text/csv",
+            use_container_width=True
+        )
     
-    st.markdown("""
-    ### 📌 Reminder:
-    1. Export your data from **Power BI** in Excel (.xlsx) or CSV (.csv) format
-    2. Make sure the file includes data for **both periods** you want to compare
-    3. Include standard Power BI columns (Date, Business Partner Name, ItemIdAndName, etc.)
+    with col3:
+        # HTML download (NEW!)
+        if st.button("🌐 GENERATE HTML", type="secondary", use_container_width=True):
+            with st.spinner("🔄 Generating interactive HTML dashboard..."):
+                html_content = generate_sales_comparison_html(
+                    df1_filtrado=df1_filtrado,
+                    df2_filtrado=df2_filtrado,
+                    comparativa=comparativa,
+                    config_info=config_info,
+                    nombre_periodo_1=nombre_periodo_1,
+                    nombre_periodo_2=nombre_periodo_2,
+                    available_types=available_types,
+                    available_sets=available_sets,
+                    available_reps=available_reps
+                )
+                
+                nombre_archivo_html = f"comparison_{nombre_periodo_1}_vs_{nombre_periodo_2}_{fecha_actual}.html"
+                
+                st.download_button(
+                    label="📥 DOWNLOAD HTML DASHBOARD",
+                    data=html_content,
+                    file_name=nombre_archivo_html,
+                    mime="text/html",
+                    use_container_width=True,
+                    key="download_html"
+                )
+                
+                st.success("✅ **HTML dashboard generated successfully!**")
     
-    Need help? Open the complete guide at the top of the page.
-    """)
+    # =========================================================================
+    # HTML INFO BOX
+    # =========================================================================
+    st.markdown("---")
+    
+    with st.expander("ℹ️ About the HTML Dashboard", expanded=False):
+        st.markdown("""
+        ### 🌐 Interactive HTML Dashboard Features:
+        
+        **📊 Self-contained & Portable:**
+        - Single HTML file with all data embedded
+        - No internet connection required after download
+        - Share with colleagues who don't have Python/Streamlit
+        
+        **🎛️ Interactive Filters:**
+        - Product Type, Set, Sales Representative filters
+        - Quick filter tags (CARE, Exact, Start, etc.) with AND/OR mode
+        - Customer search
+        - All/None buttons for each filter group
+        - Active filters display with chips
+        
+        **📈 Dynamic Visualizations:**
+        - Comparison by Sales Representative (grouped bars)
+        - Comparison by Product Type (grouped bars)
+        - Comparison by Set (grouped bars)
+        - Performance Over Time - Month-by-Month (grouped bars)
+        - All charts update dynamically with filters
+        
+        **📋 Multiple Data Views (Tabs):**
+        - **Full Comparison:** Complete comparison table with differences
+        - **Only in P1:** Records that didn't repeat (lost customers)
+        - **Only in P2:** New records (gained customers)
+        - **Common Records:** Recurring sales (loyal customers)
+        
+        **📊 Real-time Metrics:**
+        - Total sales for each period
+        - Growth percentage
+        - Record counts (common, only P1, only P2)
+        - Retention and acquisition rates
+        
+        **🔍 Sortable Tables:**
+        - Click column headers to sort
+        - Visual sort indicators (↑↓)
+        
+        **💾 State Persistence:**
+        - Filter selections remembered during session
+        - Smooth, responsive interface
+        
+        ### 💡 Best Use Cases:
+        - 📧 Email to management for review
+        - 📱 Open on mobile devices
+        - 💼 Present in meetings without internet
+        - 🔄 Archive for future reference
+        - 👥 Share with non-technical stakeholders
+        """)
+    
+    st.success(f"🎉 **Analysis completed!** Files ready to download")
+    
+    logger.info(f"Analysis completed successfully. Files: {nombre_archivo_excel}, {nombre_archivo_csv}")
+    
+# Footer
+st.markdown("---")
+st.markdown("""
+<div class='footer'>
+    <p><strong>📊 Sales Comparison Tool v2.0</strong> | BUCHI Analytics Suite</p>
+    <p>Enhanced with Advanced Analytics: Interactive visualizations · Top 10 rankings · Retention KPIs · Multi-format export</p>
+</div>
+""", unsafe_allow_html=True)

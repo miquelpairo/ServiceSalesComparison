@@ -534,6 +534,48 @@
         .tab-pane {
             padding: 20px;
         }
+
+        /* =============================
+        PLOTLY / CHART LAYOUT FIX
+        ============================= */
+
+        /* Cada panel/tab debe comportarse como bloque y no colapsar */
+        .tab-pane {
+        position: relative;
+        overflow: hidden;          /* evita que el svg se salga del panel */
+        }
+
+        /* Contenedor “tarjeta” del chart */
+        .chart-container {
+        position: relative;
+        width: 100%;
+        overflow: hidden;          /* clave: evita solapamientos */
+        }
+
+        /* El div donde Plotly dibuja */
+        .chart-container > div {
+        width: 100% !important;
+        min-height: 480px;         /* ajusta si quieres más/menos */
+        }
+
+        /* Plotly genera este div internamente; fuerza que se ajuste al contenedor */
+        .plotly-graph-div {
+        width: 100% !important;
+        height: 100% !important;
+        }
+
+        /* Evita que el SVG interno haga overflow raro */
+        .plotly-graph-div .main-svg {
+        overflow: visible;         /* o hidden si prefieres recortar tooltips */
+        }
+
+        /* Si tienes muchas barras (reps/sets) y el alto crece mucho, limita con scroll */
+        .chart-container.scrollable {
+        max-height: 70vh;          /* límite razonable */
+        overflow: auto;
+        }
+
+
     </style>
 </head>
 <body>
@@ -856,8 +898,6 @@
     </div>
     
     <script>
-
-
         // =============================
         // EMBEDDED DATA
         // =============================
@@ -872,20 +912,6 @@
         const nombreP1 = "{{ nombre_p1 }}";
         const nombreP2 = "{{ nombre_p2 }}";
         
-        // 🔍 DEBUG: Verificar datos cargados
-        console.log("=== DEBUG: DATOS CARGADOS ===");
-        console.log("df1Data length:", df1Data.length);
-        console.log("df2Data length:", df2Data.length);
-        console.log("comparativaData length:", comparativaData.length);
-        console.log("df1Data sample:", df1Data[0]);
-        console.log("df2Data sample:", df2Data[0]);
-        console.log("comparativaData sample:", comparativaData[0]);
-        console.log("availableTypes:", availableTypes);
-        console.log("availableSets:", availableSets);
-        console.log("availableReps:", availableReps);
-        console.log("nombreP1:", nombreP1);
-        console.log("nombreP2:", nombreP2);
-        
         const monthNames = ['January','February','March','April','May','June',
                             'July','August','September','October','November','December'];
         
@@ -898,36 +924,11 @@
         let activeQuickFilters = [];
         let quickMode = 'AND';
         let sortStates = {};
-        
-        // 🔍 DEBUG: Estado inicial
-        console.log("=== DEBUG: ESTADO INICIAL ===");
-        console.log("filteredP1 length:", filteredP1.length);
-        console.log("filteredP2 length:", filteredP2.length);
-        console.log("filteredComparativa length:", filteredComparativa.length);
-        
-        const monthNames = ['January','February','March','April','May','June',
-                            'July','August','September','October','November','December'];
-        
-        // =============================
-        // STATE
-        // =============================
-        let filteredP1 = [...df1Data];
-        let filteredP2 = [...df2Data];
-        let filteredComparativa = [...comparativaData];
-        let activeQuickFilters = [];
-        let quickMode = 'AND';
-        let sortStates = {};
-
-        // 🔍 DEBUG: Estado inicial
-        console.log("=== DEBUG: ESTADO INICIAL ===");
-        console.log("filteredP1 length:", filteredP1.length);
-        console.log("filteredP2 length:", filteredP2.length);
-        console.log("filteredComparativa length:", filteredComparativa.length);
         
         // =============================
         // HELPERS
         // =============================
-        function $(id) { return document.getElementById(id); }
+        function el(id) { return document.getElementById(id); }
         
         function safeLower(v) {
             return String(v ?? '').toLowerCase();
@@ -970,7 +971,7 @@
         // INITIALIZE FILTERS
         // =============================
         function initializeFilters() {
-            const typeBox = $('typeFilters');
+            const typeBox = el('typeFilters');
             availableTypes.forEach(t => {
                 const l = document.createElement('label');
                 const cb = document.createElement('input');
@@ -983,7 +984,7 @@
                 typeBox.appendChild(l);
             });
             
-            const setBox = $('setFilters');
+            const setBox  = el('setFilters');
             availableSets.forEach(s => {
                 const l = document.createElement('label');
                 const cb = document.createElement('input');
@@ -996,7 +997,7 @@
                 setBox.appendChild(l);
             });
             
-            const repBox = $('repFilters');
+            const repBox  = el('repFilters');
             availableReps.forEach(r => {
                 const l = document.createElement('label');
                 const cb = document.createElement('input');
@@ -1055,11 +1056,11 @@
             document.querySelectorAll('.quick-filter-tag')
                 .forEach(el => el.classList.remove('active'));
             
-            if ($('searchInput')) $('searchInput').value = '';
-            if ($('customerInput')) $('customerInput').value = '';
+            if (el('searchInput')) el('searchInput').value = '';
+            if (el('customerInput')) el('customerInput').value = '';
             
             quickMode = 'AND';
-            if ($('quickModeOr')) $('quickModeOr').checked = false;
+            if (el('quickModeOr')) el('quickModeOr').checked = false;
             
             applyFilters();
         }
@@ -1068,28 +1069,20 @@
         // APPLY FILTERS
         // =============================
         function applyFilters() {
-
-            console.log("=== DEBUG: applyFilters CALLED ===");
-
             const types = getCheckedValues('.type-filter');
             const sets = getCheckedValues('.set-filter');
             const reps = getCheckedValues('.rep-filter');
-            const manualSearch = safeLower($('searchInput')?.value);
-            const customerSearch = safeLower($('customerInput')?.value);
 
-            console.log("Selected types:", types);
-            console.log("Selected sets:", sets);
-            console.log("Selected reps:", reps);
-            console.log("Manual search:", manualSearch);
-            console.log("Customer search:", customerSearch);
-            
+            const manualSearch   = safeLower(el('searchInput')?.value);
+            const customerSearch = safeLower(el('customerInput')?.value);
+
             function filterRow(row) {
                 if (!types.includes(row.ProductType)) return false;
                 if (!sets.includes(row.Set)) return false;
                 if (!reps.includes(row.SalesRepresentative)) return false;
-                
+
                 const item = safeLower(row.ItemIdAndName);
-                
+
                 if (activeQuickFilters.length > 0) {
                     const matches = (quickMode === 'AND')
                         ? activeQuickFilters.every(k => item.includes(k.toLowerCase()))
@@ -1098,20 +1091,18 @@
                 } else if (manualSearch) {
                     if (!item.includes(manualSearch)) return false;
                 }
-                
+
                 if (customerSearch) {
                     const customer = safeLower(row['Business Partner Name']);
                     if (!customer.includes(customerSearch)) return false;
                 }
-                
+
                 return true;
             }
+
             
             filteredP1 = df1Data.filter(filterRow);
             filteredP2 = df2Data.filter(filterRow);
-            console.log("After filtering:");
-            console.log("filteredP1 length:", filteredP1.length);
-            console.log("filteredP2 length:", filteredP2.length);
             
             // Filter comparativa based on filtered P1 and P2
             const keysP1 = new Set();
@@ -1125,9 +1116,6 @@
                 const key = `${r['Business Partner Name']}|||${r.ItemIdAndName}|||${r.SalesRepresentative}`;
                 keysP2.add(key);
             });
-
-            console.log("keysP1 size:", keysP1.size);
-            console.log("keysP2 size:", keysP2.size);
             
             filteredComparativa = comparativaData.filter(row => {
                 const key = `${row['Business Partner Name']}|||${row.ItemIdAndName}|||${row.SalesRepresentative}`;
@@ -1159,17 +1147,17 @@
                 r[`Amount ${nombreP1}`] === 0 && r[`Amount ${nombreP2}`] > 0
             ).length;
             
-            if ($('metricP1')) $('metricP1').textContent = '€' + formatNumber(totalP1);
-            if ($('metricP2')) $('metricP2').textContent = '€' + formatNumber(totalP2);
-            if ($('metricDiff')) {
-                $('metricDiff').textContent = '€' + formatNumber(diff);
-                const delta = $('metricDiff').nextElementSibling;
+            if (el('metricP1')) el('metricP1').textContent = '€' + formatNumber(totalP1);
+            if (el('metricP2')) el('metricP2').textContent = '€' + formatNumber(totalP2);
+            if (el('metricDiff')) {
+                el('metricDiff').textContent = '€' + formatNumber(diff);
+                const delta = el('metricDiff').nextElementSibling;
                 if (delta) delta.textContent = (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%';
             }
-            if ($('metricTotal')) $('metricTotal').textContent = formatNumber(filteredComparativa.length, 0);
-            if ($('metricCommon')) $('metricCommon').textContent = formatNumber(common, 0);
-            if ($('metricOnlyP1')) $('metricOnlyP1').textContent = formatNumber(onlyP1, 0);
-            if ($('metricOnlyP2')) $('metricOnlyP2').textContent = formatNumber(onlyP2, 0);
+            if (el('metricTotal')) el('metricTotal').textContent = formatNumber(filteredComparativa.length, 0);
+            if (el('metricCommon')) el('metricCommon').textContent = formatNumber(common, 0);
+            if (el('metricOnlyP1')) el('metricOnlyP1').textContent = formatNumber(onlyP1, 0);
+            if (el('metricOnlyP2')) el('metricOnlyP2').textContent = formatNumber(onlyP2, 0);
         }
         
         // =============================
@@ -1186,9 +1174,6 @@
                 repsP2[r.SalesRepresentative] = (repsP2[r.SalesRepresentative] || 0) + (r.EUR || 0);
             });
             
-            console.log("repsP1:", repsP1);
-            console.log("repsP2:", repsP2);
-
             const allReps = Array.from(new Set([...Object.keys(repsP1), ...Object.keys(repsP2)]));
             allReps.sort((a, b) => {
                 const totalA = (repsP1[a] || 0) + (repsP2[a] || 0);
@@ -1214,13 +1199,17 @@
                 marker: {color: '#4ECDC4'}
             };
             
+            const plotConfig = { responsive: true, displayModeBar: false };
+
             Plotly.newPlot('chartReps', [traceRepsP1, traceRepsP2], {
+                autosize: true,
                 barmode: 'group',
-                height: Math.max(400, allReps.length * 40),
-                xaxis: {title: 'Sales (€)'},
-                yaxis: {title: ''},
-                legend: {orientation: 'h', yanchor: 'bottom', y: 1.02, xanchor: 'right', x: 1}
-            });
+                height: Math.max(420, allReps.length * 34),
+                margin: { l: 180, r: 30, t: 30, b: 50 },  // l alto para labels largos
+                xaxis: { title: 'Sales (€)' },
+                yaxis: { title: '' },
+                legend: { orientation: 'h', yanchor: 'bottom', y: 1.02, xanchor: 'right', x: 1 }
+            }, plotConfig);
             
             // Types chart
             const typesP1 = {};
@@ -1258,12 +1247,14 @@
             };
             
             Plotly.newPlot('chartTypes', [traceTypesP1, traceTypesP2], {
+                autosize: true,
                 barmode: 'group',
                 height: Math.max(400, allTypes.length * 40),
+                margin: { l: 180, r: 30, t: 30, b: 50 },
                 xaxis: {title: 'Sales (€)'},
                 yaxis: {title: ''},
                 legend: {orientation: 'h', yanchor: 'bottom', y: 1.02, xanchor: 'right', x: 1}
-            });
+            },plotConfig);
             
             // Sets chart
             const setsP1 = {};
@@ -1301,12 +1292,14 @@
             };
             
             Plotly.newPlot('chartSets', [traceSetsP1, traceSetsP2], {
+                autosize: true,
                 barmode: 'group',
                 height: Math.max(400, allSets.length * 50),
+                margin: { l: 180, r: 30, t: 30, b: 50 },
                 xaxis: {title: 'Sales (€)'},
                 yaxis: {title: ''},
                 legend: {orientation: 'h', yanchor: 'bottom', y: 1.02, xanchor: 'right', x: 1}
-            });
+            }, plotConfig);
             
             // Time chart (Month-by-Month)
             const monthsP1 = {};
@@ -1344,24 +1337,22 @@
             };
             
             Plotly.newPlot('chartTime', [traceTimeP1, traceTimeP2], {
+                autosize: true,
                 barmode: 'group',
                 height: 520,
+                margin: { l: 180, r: 30, t: 30, b: 50 },  // l alto para labels largos
                 xaxis: {title: ''},
                 yaxis: {title: 'Sales (€)'},
                 legend: {orientation: 'h', yanchor: 'bottom', y: 1.02, xanchor: 'right', x: 1}
-            });
+            }, plotConfig);
         }
         
         // =============================
         // RENDER TABLES
         // =============================
         function renderTables() {
-            console.log("🔄 renderTables called");
-            console.log("=== DEBUG: renderTables CALLED ===");
-            console.log("filteredComparativa length:", filteredComparativa.length);
-            
             // Comparison table
-            const compBody = $('comparisonBody');
+            const compBody = el('comparisonBody');
             if (compBody) {
                 compBody.innerHTML = '';
                 
@@ -1390,7 +1381,7 @@
             }
             
             // Only P1 table
-            const onlyP1Body = $('onlyP1Body');
+            const onlyP1Body = el('onlyP1Body');
             if (onlyP1Body) {
                 onlyP1Body.innerHTML = '';
                 
@@ -1425,7 +1416,7 @@
             }
             
             // Only P2 table
-            const onlyP2Body = $('onlyP2Body');
+            const onlyP2Body = el('onlyP2Body');
             if (onlyP2Body) {
                 onlyP2Body.innerHTML = '';
                 
@@ -1460,7 +1451,7 @@
             }
             
             // Common table
-            const commonBody = $('commonBody');
+            const commonBody = el('commonBody');
             if (commonBody) {
                 commonBody.innerHTML = '';
                 
@@ -1508,11 +1499,11 @@
             const total = comparativaData.length;
             const shown = filteredComparativa.length;
             
-            if ($('resultCount')) {
-                $('resultCount').textContent = `Showing ${shown} of ${total} records`;
+            if (el('resultCount')) {
+                el('resultCount').textContent = `Showing ${shown} of ${total} records`;
             }
             
-            if (!$('activeChips')) return;
+            if (!el('activeChips')) return;
             
             const chips = [];
             
@@ -1533,12 +1524,12 @@
                 selectedReps.forEach(v => chips.push(`Rep:${v}`));
             }
             
-            $('activeChips').innerHTML = '';
+            el('activeChips').innerHTML = '';
             chips.forEach(c => {
                 const span = document.createElement('span');
                 span.className = 'active-chip';
                 span.textContent = c;
-                $('activeChips').appendChild(span);
+                el('activeChips').appendChild(span);
             });
         }
         
@@ -1560,19 +1551,19 @@
             
             switch(tableId) {
                 case 'comparison':
-                    tableElement = $('comparisonTable');
+                    tableElement = el('comparisonTable');
                     bodyId = 'comparisonBody';
                     break;
                 case 'onlyP1':
-                    tableElement = $('onlyP1Table');
+                    tableElement = el('onlyP1Table');
                     bodyId = 'onlyP1Body';
                     break;
                 case 'onlyP2':
-                    tableElement = $('onlyP2Table');
+                    tableElement = el('onlyP2Table');
                     bodyId = 'onlyP2Body';
                     break;
                 case 'common':
-                    tableElement = $('commonTable');
+                    tableElement = el('commonTable');
                     bodyId = 'commonBody';
                     break;
             }
@@ -1587,7 +1578,7 @@
                 }
             });
             
-            const tbody = $(bodyId);
+            const tbody = el(bodyId);
             if (!tbody) return;
             
             const rows = Array.from(tbody.querySelectorAll('tr'));
@@ -1618,30 +1609,17 @@
         // BOOT
         // =============================
         $(document).ready(function() {
-            console.log("=== DEBUG: DOCUMENT READY ===");
-            
             initializeFilters();
-            
-            console.log("Filters initialized, calling applyFilters...");
             applyFilters();
             
             // Resize Plotly charts when tab is shown
             $('a[data-toggle="tab"]').on('shown.bs.tab', function (e) {
-                console.log("Tab shown:", e.target);
                 const targetId = $(e.target).attr('href');
-                console.log("Target tab:", targetId);
                 const plotDiv = $(targetId).find('.plotly-graph-div')[0];
-                console.log("Plot div found:", !!plotDiv);
                 if (plotDiv) {
                     Plotly.Plots.resize(plotDiv);
                 }
             });
-            
-            // 🔍 DEBUG: Verificar tabs activas
-            console.log("Active chart tab:", $('#chartsTab .nav-link.active').text());
-            console.log("Active table tab:", $('#dataTablesTab .nav-link.active').text());
-            console.log("Visible chart pane:", $('#chartsTabContent .tab-pane.active').attr('id'));
-            console.log("Visible table pane:", $('#dataTablesContent .tab-pane.active').attr('id'));
         });
     </script>
 </body>

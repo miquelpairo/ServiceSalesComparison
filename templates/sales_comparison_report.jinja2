@@ -483,6 +483,7 @@
             background: white;
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            overflow: visible
         }
         
         /* Bootstrap Tabs Styling - Mejorado */
@@ -533,6 +534,18 @@
         
         .tab-pane {
             padding: 20px;
+        }
+
+        .chart-container > div {
+            width: 100% !important;     /* el div chartReps, chartTypes... */
+        }
+
+        .plotly-graph-div {
+            width: 100% !important;
+            max-width: 100% !important;
+        }
+        #chartReps, #chartTypes, #chartSets, #chartTime {
+            min-height: 820px;
         }
     </style>
 </head>
@@ -586,6 +599,66 @@
                     <div class="checkbox-group" id="repFilters"></div>
                 </details>
             </div>
+            
+            {% if available_market_orgs and available_market_orgs|length > 0 %}
+            <div class="filter-group">
+                <details>
+                    <summary>
+                        <span class="summary-text">🏢 Market Organization</span>
+                        <span class="filter-actions">
+                            <button type="button" class="mini-btn" onclick="setGroupChecked('mo', true); event.preventDefault(); event.stopPropagation();">All</button>
+                            <button type="button" class="mini-btn" onclick="setGroupChecked('mo', false); event.preventDefault(); event.stopPropagation();">None</button>
+                        </span>
+                    </summary>
+                    <div class="checkbox-group" id="moFilters"></div>
+                </details>
+            </div>
+            {% endif %}
+            
+            {% if available_territories and available_territories|length > 0 %}
+            <div class="filter-group">
+                <details>
+                    <summary>
+                        <span class="summary-text">🌍 Sales Territory</span>
+                        <span class="filter-actions">
+                            <button type="button" class="mini-btn" onclick="setGroupChecked('territory', true); event.preventDefault(); event.stopPropagation();">All</button>
+                            <button type="button" class="mini-btn" onclick="setGroupChecked('territory', false); event.preventDefault(); event.stopPropagation();">None</button>
+                        </span>
+                    </summary>
+                    <div class="checkbox-group" id="territoryFilters"></div>
+                </details>
+            </div>
+            {% endif %}
+            
+            {% if available_countries and available_countries|length > 0 %}
+            <div class="filter-group">
+                <details>
+                    <summary>
+                        <span class="summary-text">🌎 Country</span>
+                        <span class="filter-actions">
+                            <button type="button" class="mini-btn" onclick="setGroupChecked('country', true); event.preventDefault(); event.stopPropagation();">All</button>
+                            <button type="button" class="mini-btn" onclick="setGroupChecked('country', false); event.preventDefault(); event.stopPropagation();">None</button>
+                        </span>
+                    </summary>
+                    <div class="checkbox-group" id="countryFilters"></div>
+                </details>
+            </div>
+            {% endif %}
+            
+            {% if available_segments and available_segments|length > 0 %}
+            <div class="filter-group">
+                <details>
+                    <summary>
+                        <span class="summary-text">👥 End User Segment</span>
+                        <span class="filter-actions">
+                            <button type="button" class="mini-btn" onclick="setGroupChecked('segment', true); event.preventDefault(); event.stopPropagation();">All</button>
+                            <button type="button" class="mini-btn" onclick="setGroupChecked('segment', false); event.preventDefault(); event.stopPropagation();">None</button>
+                        </span>
+                    </summary>
+                    <div class="checkbox-group" id="segmentFilters"></div>
+                </details>
+            </div>
+            {% endif %}
             
             <div class="filter-group">
                 <details open>
@@ -769,6 +842,12 @@
             
             <div class="tab-content" id="dataTablesContent">
                 <div class="tab-pane fade show active" id="comparison-section" role="tabpanel">
+                    <div class="text-right mb-2">
+                    <button class="btn btn-sm btn-outline-primary"
+                            onclick="downloadTableCSV('comparisonTable','comparison.csv')">
+                        ⬇ Download CSV
+                    </button>
+                    </div>
                     <div class="table-container">
                         <table id="comparisonTable">
                             <thead>
@@ -787,7 +866,14 @@
                     </div>
                 </div>
                 
-                <div class="tab-pane fade" id="only-p1-section" role="tabpanel">
+                <div class="tab-pane fade" id="only-p1-section" role="tabpanel">    
+                    <div class="text-right mb-2">
+                    <button class="btn btn-sm btn-outline-primary"
+                            onclick="downloadTableCSV('onlyP1Table','only_p1.csv')">
+                        ⬇ Download CSV
+                    </button>
+                    </div>
+                   
                     <div class="table-container">
                         <table id="onlyP1Table">
                             <thead>
@@ -807,6 +893,13 @@
                 </div>
                 
                 <div class="tab-pane fade" id="only-p2-section" role="tabpanel">
+                    <div class="text-right mb-2">
+                    <button class="btn btn-sm btn-outline-primary"
+                            onclick="downloadTableCSV('onlyP2Table','only_p2.csv')">
+                        ⬇ Download CSV
+                    </button>
+                    </div>
+
                     <div class="table-container">
                         <table id="onlyP2Table">
                             <thead>
@@ -826,6 +919,13 @@
                 </div>
                 
                 <div class="tab-pane fade" id="common-section" role="tabpanel">
+                    <div class="text-right mb-2">
+                    <button class="btn btn-sm btn-outline-primary"
+                            onclick="downloadTableCSV('commonTable','common.csv')">
+                        ⬇ Download CSV
+                    </button>
+                    </div>
+
                     <div class="table-container">
                         <table id="commonTable">
                             <thead>
@@ -855,9 +955,7 @@
         </div>
     </div>
     
-    <script>
-
-
+<script>
         // =============================
         // EMBEDDED DATA
         // =============================
@@ -868,24 +966,14 @@
         const availableTypes = {{ available_types | tojson }};
         const availableSets = {{ available_sets | tojson }};
         const availableReps = {{ available_reps | tojson }};
+        const availableMarketOrgs = {{ available_market_orgs | tojson }};
+        const availableTerritories = {{ available_territories | tojson }};
+        const availableCountries = {{ available_countries | tojson }};
+        const availableSegments = {{ available_segments | tojson }};
         
         const nombreP1 = "{{ nombre_p1 }}";
         const nombreP2 = "{{ nombre_p2 }}";
         
-        // 🔍 DEBUG: Verificar datos cargados
-        console.log("=== DEBUG: DATOS CARGADOS ===");
-        console.log("df1Data length:", df1Data.length);
-        console.log("df2Data length:", df2Data.length);
-        console.log("comparativaData length:", comparativaData.length);
-        console.log("df1Data sample:", df1Data[0]);
-        console.log("df2Data sample:", df2Data[0]);
-        console.log("comparativaData sample:", comparativaData[0]);
-        console.log("availableTypes:", availableTypes);
-        console.log("availableSets:", availableSets);
-        console.log("availableReps:", availableReps);
-        console.log("nombreP1:", nombreP1);
-        console.log("nombreP2:", nombreP2);
-        
         const monthNames = ['January','February','March','April','May','June',
                             'July','August','September','October','November','December'];
         
@@ -898,36 +986,42 @@
         let activeQuickFilters = [];
         let quickMode = 'AND';
         let sortStates = {};
-        
-        // 🔍 DEBUG: Estado inicial
-        console.log("=== DEBUG: ESTADO INICIAL ===");
-        console.log("filteredP1 length:", filteredP1.length);
-        console.log("filteredP2 length:", filteredP2.length);
-        console.log("filteredComparativa length:", filteredComparativa.length);
-        
-        const monthNames = ['January','February','March','April','May','June',
-                            'July','August','September','October','November','December'];
-        
-        // =============================
-        // STATE
-        // =============================
-        let filteredP1 = [...df1Data];
-        let filteredP2 = [...df2Data];
-        let filteredComparativa = [...comparativaData];
-        let activeQuickFilters = [];
-        let quickMode = 'AND';
-        let sortStates = {};
-
-        // 🔍 DEBUG: Estado inicial
-        console.log("=== DEBUG: ESTADO INICIAL ===");
-        console.log("filteredP1 length:", filteredP1.length);
-        console.log("filteredP2 length:", filteredP2.length);
-        console.log("filteredComparativa length:", filteredComparativa.length);
         
         // =============================
         // HELPERS
         // =============================
-        function $(id) { return document.getElementById(id); }
+        function downloadTableCSV(tableId, filename) {
+        const table = document.getElementById(tableId);
+        if (!table) return;
+
+        const rows = Array.from(table.querySelectorAll('tr'));
+        const csv = rows.map(row => {
+            const cols = Array.from(row.querySelectorAll('th,td')).map(cell => {
+            let text = (cell.textContent ?? '').trim();
+            // Escapar comillas y envolver si hace falta
+            text = text.replace(/"/g, '""');
+            if (/[",\n;]/.test(text)) text = `"${text}"`;
+            return text;
+            });
+            return cols.join(',');
+        }).join('\n');
+
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+
+        URL.revokeObjectURL(url);
+        }
+
+
+
+        function el(id) { return document.getElementById(id); }
         
         function safeLower(v) {
             return String(v ?? '').toLowerCase();
@@ -970,7 +1064,7 @@
         // INITIALIZE FILTERS
         // =============================
         function initializeFilters() {
-            const typeBox = $('typeFilters');
+            const typeBox = el('typeFilters');
             availableTypes.forEach(t => {
                 const l = document.createElement('label');
                 const cb = document.createElement('input');
@@ -983,7 +1077,7 @@
                 typeBox.appendChild(l);
             });
             
-            const setBox = $('setFilters');
+            const setBox = el('setFilters');
             availableSets.forEach(s => {
                 const l = document.createElement('label');
                 const cb = document.createElement('input');
@@ -996,7 +1090,7 @@
                 setBox.appendChild(l);
             });
             
-            const repBox = $('repFilters');
+            const repBox = el('repFilters');
             availableReps.forEach(r => {
                 const l = document.createElement('label');
                 const cb = document.createElement('input');
@@ -1009,8 +1103,77 @@
                 repBox.appendChild(l);
             });
             
+            // Initialize new filters if available
+            if (availableMarketOrgs && availableMarketOrgs.length > 0) {
+                const moBox = el('moFilters');
+                if (moBox) {
+                    availableMarketOrgs.forEach(mo => {
+                        const l = document.createElement('label');
+                        const cb = document.createElement('input');
+                        cb.type = 'checkbox';
+                        cb.value = mo;
+                        cb.checked = true;
+                        cb.className = 'mo-filter';
+                        l.appendChild(cb);
+                        l.append(' ' + mo);
+                        moBox.appendChild(l);
+                    });
+                }
+            }
+            
+            if (availableTerritories && availableTerritories.length > 0) {
+                const terBox = el('territoryFilters');
+                if (terBox) {
+                    availableTerritories.forEach(t => {
+                        const l = document.createElement('label');
+                        const cb = document.createElement('input');
+                        cb.type = 'checkbox';
+                        cb.value = t;
+                        cb.checked = true;
+                        cb.className = 'territory-filter';
+                        l.appendChild(cb);
+                        l.append(' ' + t);
+                        terBox.appendChild(l);
+                    });
+                }
+            }
+            
+            if (availableCountries && availableCountries.length > 0) {
+                const countryBox = el('countryFilters');
+                if (countryBox) {
+                    availableCountries.forEach(c => {
+                        const l = document.createElement('label');
+                        const cb = document.createElement('input');
+                        cb.type = 'checkbox';
+                        cb.value = c;
+                        cb.checked = true;
+                        cb.className = 'country-filter';
+                        l.appendChild(cb);
+                        l.append(' ' + c);
+                        countryBox.appendChild(l);
+                    });
+                }
+            }
+            
+            if (availableSegments && availableSegments.length > 0) {
+                const segBox = el('segmentFilters');
+                if (segBox) {
+                    availableSegments.forEach(s => {
+                        const l = document.createElement('label');
+                        const cb = document.createElement('input');
+                        cb.type = 'checkbox';
+                        cb.value = s;
+                        cb.checked = true;
+                        cb.className = 'segment-filter';
+                        l.appendChild(cb);
+                        l.append(' ' + s);
+                        segBox.appendChild(l);
+                    });
+                }
+            }
+            
             const applyDebounced = debounce(applyFilters, 200);
-            document.querySelectorAll('.type-filter, .set-filter, .rep-filter')
+            document.querySelectorAll('.type-filter, .set-filter, .rep-filter, .mo-filter, .territory-filter, .country-filter, .segment-filter')
                 .forEach(cb => cb.addEventListener('change', applyDebounced));
         }
         
@@ -1021,7 +1184,11 @@
             const map = {
                 type: '.type-filter',
                 set: '.set-filter',
-                rep: '.rep-filter'
+                rep: '.rep-filter',
+                mo: '.mo-filter',
+                territory: '.territory-filter',
+                country: '.country-filter',
+                segment: '.segment-filter'
             };
             const selector = map[group];
             if (!selector) return;
@@ -1050,16 +1217,20 @@
             setAll('.type-filter', true);
             setAll('.set-filter', true);
             setAll('.rep-filter', true);
+            setAll('.mo-filter', true);
+            setAll('.territory-filter', true);
+            setAll('.country-filter', true);
+            setAll('.segment-filter', true);
             
             activeQuickFilters = [];
             document.querySelectorAll('.quick-filter-tag')
                 .forEach(el => el.classList.remove('active'));
             
-            if ($('searchInput')) $('searchInput').value = '';
-            if ($('customerInput')) $('customerInput').value = '';
+            if (el('searchInput')) el('searchInput').value = '';
+            if (el('customerInput')) el('customerInput').value = '';
             
             quickMode = 'AND';
-            if ($('quickModeOr')) $('quickModeOr').checked = false;
+            if (el('quickModeOr')) el('quickModeOr').checked = false;
             
             applyFilters();
         }
@@ -1068,25 +1239,26 @@
         // APPLY FILTERS
         // =============================
         function applyFilters() {
-
-            console.log("=== DEBUG: applyFilters CALLED ===");
-
             const types = getCheckedValues('.type-filter');
             const sets = getCheckedValues('.set-filter');
             const reps = getCheckedValues('.rep-filter');
-            const manualSearch = safeLower($('searchInput')?.value);
-            const customerSearch = safeLower($('customerInput')?.value);
-
-            console.log("Selected types:", types);
-            console.log("Selected sets:", sets);
-            console.log("Selected reps:", reps);
-            console.log("Manual search:", manualSearch);
-            console.log("Customer search:", customerSearch);
+            const mos = getCheckedValues('.mo-filter');
+            const territories = getCheckedValues('.territory-filter');
+            const countries = getCheckedValues('.country-filter');
+            const segments = getCheckedValues('.segment-filter');
+            const manualSearch = safeLower(el('searchInput')?.value);
+            const customerSearch = safeLower(el('customerInput')?.value);
             
             function filterRow(row) {
                 if (!types.includes(row.ProductType)) return false;
                 if (!sets.includes(row.Set)) return false;
                 if (!reps.includes(row.SalesRepresentative)) return false;
+                
+                // New filters (only apply if data exists)
+                if (mos.length > 0 && row['Market Organization Name'] && !mos.includes(row['Market Organization Name'])) return false;
+                if (territories.length > 0 && row['Sales Territory'] && !territories.includes(row['Sales Territory'])) return false;
+                if (countries.length > 0 && row['Country'] && !countries.includes(row['Country'])) return false;
+                if (segments.length > 0 && row['End User Segment'] && !segments.includes(row['End User Segment'])) return false;
                 
                 const item = safeLower(row.ItemIdAndName);
                 
@@ -1109,9 +1281,6 @@
             
             filteredP1 = df1Data.filter(filterRow);
             filteredP2 = df2Data.filter(filterRow);
-            console.log("After filtering:");
-            console.log("filteredP1 length:", filteredP1.length);
-            console.log("filteredP2 length:", filteredP2.length);
             
             // Filter comparativa based on filtered P1 and P2
             const keysP1 = new Set();
@@ -1125,9 +1294,6 @@
                 const key = `${r['Business Partner Name']}|||${r.ItemIdAndName}|||${r.SalesRepresentative}`;
                 keysP2.add(key);
             });
-
-            console.log("keysP1 size:", keysP1.size);
-            console.log("keysP2 size:", keysP2.size);
             
             filteredComparativa = comparativaData.filter(row => {
                 const key = `${row['Business Partner Name']}|||${row.ItemIdAndName}|||${row.SalesRepresentative}`;
@@ -1159,209 +1325,257 @@
                 r[`Amount ${nombreP1}`] === 0 && r[`Amount ${nombreP2}`] > 0
             ).length;
             
-            if ($('metricP1')) $('metricP1').textContent = '€' + formatNumber(totalP1);
-            if ($('metricP2')) $('metricP2').textContent = '€' + formatNumber(totalP2);
-            if ($('metricDiff')) {
-                $('metricDiff').textContent = '€' + formatNumber(diff);
-                const delta = $('metricDiff').nextElementSibling;
+            if (el('metricP1')) el('metricP1').textContent = '€' + formatNumber(totalP1);
+            if (el('metricP2')) el('metricP2').textContent = '€' + formatNumber(totalP2);
+            if (el('metricDiff')) {
+                el('metricDiff').textContent = '€' + formatNumber(diff);
+                const delta = el('metricDiff').nextElementSibling;
                 if (delta) delta.textContent = (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%';
             }
-            if ($('metricTotal')) $('metricTotal').textContent = formatNumber(filteredComparativa.length, 0);
-            if ($('metricCommon')) $('metricCommon').textContent = formatNumber(common, 0);
-            if ($('metricOnlyP1')) $('metricOnlyP1').textContent = formatNumber(onlyP1, 0);
-            if ($('metricOnlyP2')) $('metricOnlyP2').textContent = formatNumber(onlyP2, 0);
+            if (el('metricTotal')) el('metricTotal').textContent = formatNumber(filteredComparativa.length, 0);
+            if (el('metricCommon')) el('metricCommon').textContent = formatNumber(common, 0);
+            if (el('metricOnlyP1')) el('metricOnlyP1').textContent = formatNumber(onlyP1, 0);
+            if (el('metricOnlyP2')) el('metricOnlyP2').textContent = formatNumber(onlyP2, 0);
         }
         
         // =============================
         // RENDER CHARTS
         // =============================
-        function renderCharts() {
-            // Reps chart
-            const repsP1 = {};
-            const repsP2 = {};
-            filteredP1.forEach(r => {
-                repsP1[r.SalesRepresentative] = (repsP1[r.SalesRepresentative] || 0) + (r.EUR || 0);
-            });
-            filteredP2.forEach(r => {
-                repsP2[r.SalesRepresentative] = (repsP2[r.SalesRepresentative] || 0) + (r.EUR || 0);
-            });
-            
-            console.log("repsP1:", repsP1);
-            console.log("repsP2:", repsP2);
+        function plotlyConfig() {
+        return { responsive: true, displaylogo: false };
+        }
 
-            const allReps = Array.from(new Set([...Object.keys(repsP1), ...Object.keys(repsP2)]));
-            allReps.sort((a, b) => {
-                const totalA = (repsP1[a] || 0) + (repsP2[a] || 0);
-                const totalB = (repsP1[b] || 0) + (repsP2[b] || 0);
-                return totalA - totalB;
-            });
-            
-            const traceRepsP1 = {
-                name: nombreP1,
-                y: allReps,
-                x: allReps.map(r => repsP1[r] || 0),
-                type: 'bar',
-                orientation: 'h',
-                marker: {color: '#FF6B6B'}
-            };
-            
-            const traceRepsP2 = {
-                name: nombreP2,
-                y: allReps,
-                x: allReps.map(r => repsP2[r] || 0),
-                type: 'bar',
-                orientation: 'h',
-                marker: {color: '#4ECDC4'}
-            };
-            
-            Plotly.newPlot('chartReps', [traceRepsP1, traceRepsP2], {
-                barmode: 'group',
-                height: Math.max(400, allReps.length * 40),
-                xaxis: {title: 'Sales (€)'},
-                yaxis: {title: ''},
-                legend: {orientation: 'h', yanchor: 'bottom', y: 1.02, xanchor: 'right', x: 1}
-            });
-            
-            // Types chart
-            const typesP1 = {};
-            const typesP2 = {};
-            filteredP1.forEach(r => {
-                typesP1[r.ProductType] = (typesP1[r.ProductType] || 0) + (r.EUR || 0);
-            });
-            filteredP2.forEach(r => {
-                typesP2[r.ProductType] = (typesP2[r.ProductType] || 0) + (r.EUR || 0);
-            });
-            
-            const allTypes = Array.from(new Set([...Object.keys(typesP1), ...Object.keys(typesP2)]));
-            allTypes.sort((a, b) => {
-                const totalA = (typesP1[a] || 0) + (typesP2[a] || 0);
-                const totalB = (typesP1[b] || 0) + (typesP2[b] || 0);
-                return totalA - totalB;
-            });
-            
-            const traceTypesP1 = {
-                name: nombreP1,
-                y: allTypes,
-                x: allTypes.map(t => typesP1[t] || 0),
-                type: 'bar',
-                orientation: 'h',
-                marker: {color: '#FF6B6B'}
-            };
-            
-            const traceTypesP2 = {
-                name: nombreP2,
-                y: allTypes,
-                x: allTypes.map(t => typesP2[t] || 0),
-                type: 'bar',
-                orientation: 'h',
-                marker: {color: '#4ECDC4'}
-            };
-            
-            Plotly.newPlot('chartTypes', [traceTypesP1, traceTypesP2], {
-                barmode: 'group',
-                height: Math.max(400, allTypes.length * 40),
-                xaxis: {title: 'Sales (€)'},
-                yaxis: {title: ''},
-                legend: {orientation: 'h', yanchor: 'bottom', y: 1.02, xanchor: 'right', x: 1}
-            });
-            
-            // Sets chart
-            const setsP1 = {};
-            const setsP2 = {};
-            filteredP1.forEach(r => {
-                setsP1[r.Set] = (setsP1[r.Set] || 0) + (r.EUR || 0);
-            });
-            filteredP2.forEach(r => {
-                setsP2[r.Set] = (setsP2[r.Set] || 0) + (r.EUR || 0);
-            });
-            
-            const allSets = Array.from(new Set([...Object.keys(setsP1), ...Object.keys(setsP2)]));
-            allSets.sort((a, b) => {
-                const totalA = (setsP1[a] || 0) + (setsP2[a] || 0);
-                const totalB = (setsP1[b] || 0) + (setsP2[b] || 0);
-                return totalA - totalB;
-            });
-            
-            const traceSetsP1 = {
-                name: nombreP1,
-                y: allSets,
-                x: allSets.map(s => setsP1[s] || 0),
-                type: 'bar',
-                orientation: 'h',
-                marker: {color: '#FF6B6B'}
-            };
-            
-            const traceSetsP2 = {
-                name: nombreP2,
-                y: allSets,
-                x: allSets.map(s => setsP2[s] || 0),
-                type: 'bar',
-                orientation: 'h',
-                marker: {color: '#4ECDC4'}
-            };
-            
-            Plotly.newPlot('chartSets', [traceSetsP1, traceSetsP2], {
-                barmode: 'group',
-                height: Math.max(400, allSets.length * 50),
-                xaxis: {title: 'Sales (€)'},
-                yaxis: {title: ''},
-                legend: {orientation: 'h', yanchor: 'bottom', y: 1.02, xanchor: 'right', x: 1}
-            });
-            
-            // Time chart (Month-by-Month)
-            const monthsP1 = {};
-            const monthsP2 = {};
-            
-            filteredP1.forEach(r => {
-                const d = new Date(r.Date);
-                const m = d.getMonth() + 1;
-                monthsP1[m] = (monthsP1[m] || 0) + (r.EUR || 0);
-            });
-            
-            filteredP2.forEach(r => {
-                const d = new Date(r.Date);
-                const m = d.getMonth() + 1;
-                monthsP2[m] = (monthsP2[m] || 0) + (r.EUR || 0);
-            });
-            
-            const allMonths = [1,2,3,4,5,6,7,8,9,10,11,12];
-            const monthLabels = allMonths.map(m => monthNames[m-1]);
-            
-            const traceTimeP1 = {
-                name: nombreP1,
-                x: monthLabels,
-                y: allMonths.map(m => monthsP1[m] || 0),
-                type: 'bar',
-                marker: {color: '#FF6B6B'}
-            };
-            
-            const traceTimeP2 = {
-                name: nombreP2,
-                x: monthLabels,
-                y: allMonths.map(m => monthsP2[m] || 0),
-                type: 'bar',
-                marker: {color: '#4ECDC4'}
-            };
-            
-            Plotly.newPlot('chartTime', [traceTimeP1, traceTimeP2], {
-                barmode: 'group',
-                height: 520,
-                xaxis: {title: ''},
-                yaxis: {title: 'Sales (€)'},
-                legend: {orientation: 'h', yanchor: 'bottom', y: 1.02, xanchor: 'right', x: 1}
-            });
+        function baseLayout(extra = {}) {
+        return Object.assign({
+            autosize: true,
+            margin: { l: 80, r: 30, t: 40, b: 60 },
+            legend: {
+            orientation: 'h',
+            yanchor: 'bottom',
+            y: 1.02,
+            xanchor: 'right',
+            x: 1
+            }
+        }, extra);
+        }
+
+        function layoutWithBigLegend(extra = {}) {
+        return baseLayout(Object.assign({
+            margin: { l: 240, r: 30, t: 40, b: 60 }, // ⬅ más espacio izq, menos arriba
+            legend: {
+            orientation: 'h',
+            x: 1,
+            xanchor: 'right',
+            y: 1.02,
+            yanchor: 'bottom',
+            itemwidth: 60
+            }
+        }, extra));
+        }
+
+
+
+
+        function renderEmptyChart(divId, title) {
+        Plotly.newPlot(divId, [], baseLayout({
+            height: 420,
+            annotations: [{
+            text: `No data for ${title} (check filters)`,
+            xref: 'paper', yref: 'paper',
+            x: 0.5, y: 0.5,
+            showarrow: false,
+            font: { size: 16 }
+            }],
+            xaxis: { visible: false },
+            yaxis: { visible: false }
+        }), plotlyConfig());
+        }
+
+        function resizeVisibleCharts($scope) {
+        // plotly usa .js-plotly-plot en el div raíz del chart
+        const $plots = $scope.find('.js-plotly-plot');
+
+        $plots.each(function () {
+            const gd = this;
+
+            try {
+            // 1) resize
+            Plotly.Plots.resize(gd);
+
+            // 2) relayout para recalcular autosize (clave en tabs)
+            Plotly.relayout(gd, { autosize: true });
+            } catch (err) {}
+        });
+        }
+
+        function forceResizeByIds(ids) {
+        ids.forEach(id => {
+            const gd = document.getElementById(id);
+            if (!gd) return;
+
+            try {
+            Plotly.Plots.resize(gd);
+            Plotly.relayout(gd, { autosize: true });
+            } catch (err) {}
+        });
+        }
+
+        function clamp(n, min, max) { return Math.max(min, Math.min(max, n)); }
+
+        function heightBarsHorizontal(nRows, opts = {}) {
+        const { base = 260, perRow = 40, min = 620, max = 1700 } = opts;
+        return clamp(base + nRows * perRow, min, max);
+        }
+
+        function heightBarsVertical(opts = {}) {
+        const { min = 520, max = 720 } = opts;
+        return clamp(560, min, max);
+        }
+
+
+        function renderCharts() {
+        // -----------------------------
+        // Reps chart
+        // -----------------------------
+        const repsP1 = {};
+        const repsP2 = {};
+
+        filteredP1.forEach(r => {
+            const k = r.SalesRepresentative ?? '(Unknown)';
+            repsP1[k] = (repsP1[k] || 0) + (r.EUR || 0);
+        });
+
+        filteredP2.forEach(r => {
+            const k = r.SalesRepresentative ?? '(Unknown)';
+            repsP2[k] = (repsP2[k] || 0) + (r.EUR || 0);
+        });
+
+        const allReps = Array.from(new Set([...Object.keys(repsP1), ...Object.keys(repsP2)]));
+        if (allReps.length === 0) {
+            renderEmptyChart('chartReps', 'Sales Representatives');
+        } else {
+            allReps.sort((a, b) => ((repsP1[a] || 0) + (repsP2[a] || 0)) - ((repsP1[b] || 0) + (repsP2[b] || 0)));
+
+            Plotly.newPlot('chartReps', [
+            { name: nombreP1, y: allReps, x: allReps.map(r => repsP1[r] || 0), type: 'bar', orientation: 'h', marker: { color: '#FF6B6B' } },
+            { name: nombreP2, y: allReps, x: allReps.map(r => repsP2[r] || 0), type: 'bar', orientation: 'h', marker: { color: '#4ECDC4' } }
+            ], layoutWithBigLegend({
+            barmode: 'group',
+            height: heightBarsHorizontal(allReps.length, { base: 260, perRow: 40, min: 620, max: 1700 }),
+            xaxis: { title: 'Sales (€)' },
+            yaxis: { title: '', automargin: true }
+            }), plotlyConfig());
+        }
+
+        // -----------------------------
+        // Types chart
+        // -----------------------------
+        const typesP1 = {};
+        const typesP2 = {};
+
+        filteredP1.forEach(r => {
+            const k = r.ProductType ?? '(Unknown)';
+            typesP1[k] = (typesP1[k] || 0) + (r.EUR || 0);
+        });
+
+        filteredP2.forEach(r => {
+            const k = r.ProductType ?? '(Unknown)';
+            typesP2[k] = (typesP2[k] || 0) + (r.EUR || 0);
+        });
+
+        const allTypes = Array.from(new Set([...Object.keys(typesP1), ...Object.keys(typesP2)]));
+        if (allTypes.length === 0) {
+            renderEmptyChart('chartTypes', 'Product Types');
+        } else {
+            allTypes.sort((a, b) => ((typesP1[a] || 0) + (typesP2[a] || 0)) - ((typesP1[b] || 0) + (typesP2[b] || 0)));
+
+            Plotly.newPlot('chartTypes', [
+            { name: nombreP1, y: allTypes, x: allTypes.map(t => typesP1[t] || 0), type: 'bar', orientation: 'h', marker: { color: '#FF6B6B' } },
+            { name: nombreP2, y: allTypes, x: allTypes.map(t => typesP2[t] || 0), type: 'bar', orientation: 'h', marker: { color: '#4ECDC4' } }
+            ], layoutWithBigLegend({
+            barmode: 'group',
+            height: heightBarsHorizontal(allTypes.length, { base: 260, perRow: 40, min: 720, max: 1700 }),
+            xaxis: { title: 'Sales (€)' },
+            yaxis: { title: '', automargin: true, tickfont: { size: 12 } }
+            }), plotlyConfig());
+        }
+
+        // -----------------------------
+        // Sets chart
+        // -----------------------------
+        const setsP1 = {};
+        const setsP2 = {};
+
+        filteredP1.forEach(r => {
+            const k = r.Set ?? '(Unknown)';
+            setsP1[k] = (setsP1[k] || 0) + (r.EUR || 0);
+        });
+
+        filteredP2.forEach(r => {
+            const k = r.Set ?? '(Unknown)';
+            setsP2[k] = (setsP2[k] || 0) + (r.EUR || 0);
+        });
+
+        const allSets = Array.from(new Set([...Object.keys(setsP1), ...Object.keys(setsP2)]));
+        if (allSets.length === 0) {
+            renderEmptyChart('chartSets', 'Sets');
+        } else {
+            allSets.sort((a, b) => ((setsP1[a] || 0) + (setsP2[a] || 0)) - ((setsP1[b] || 0) + (setsP2[b] || 0)));
+
+            Plotly.newPlot('chartSets', [
+            { name: nombreP1, y: allSets, x: allSets.map(s => setsP1[s] || 0), type: 'bar', orientation: 'h', marker: { color: '#FF6B6B' } },
+            { name: nombreP2, y: allSets, x: allSets.map(s => setsP2[s] || 0), type: 'bar', orientation: 'h', marker: { color: '#4ECDC4' } }
+            ], baseLayout({
+            barmode: 'group',
+            height: heightBarsHorizontal(allSets.length, { base: 260, perRow: 45, min: 760, max: 2000 }),
+            xaxis: { title: 'Sales (€)' },
+            yaxis: { title: '', automargin: true, tickfont: { size: 12 } }
+            }), plotlyConfig());
+        }
+
+        // -----------------------------
+        // Time chart
+        // -----------------------------
+        const monthsP1 = {};
+        const monthsP2 = {};
+
+        filteredP1.forEach(r => {
+            const d = new Date(r.Date);
+            const m = d.getMonth() + 1;
+            monthsP1[m] = (monthsP1[m] || 0) + (r.EUR || 0);
+        });
+
+        filteredP2.forEach(r => {
+            const d = new Date(r.Date);
+            const m = d.getMonth() + 1;
+            monthsP2[m] = (monthsP2[m] || 0) + (r.EUR || 0);
+        });
+
+        const allMonths = [1,2,3,4,5,6,7,8,9,10,11,12];
+        const monthLabels = allMonths.map(m => monthNames[m-1]);
+        const anyTimeData = allMonths.some(m => (monthsP1[m] || 0) !== 0 || (monthsP2[m] || 0) !== 0);
+
+        if (!anyTimeData) {
+            renderEmptyChart('chartTime', 'Time Evolution');
+        } else {
+            Plotly.newPlot('chartTime', [
+            { name: nombreP1, x: monthLabels, y: allMonths.map(m => monthsP1[m] || 0), type: 'bar', marker: { color: '#FF6B6B' } },
+            { name: nombreP2, x: monthLabels, y: allMonths.map(m => monthsP2[m] || 0), type: 'bar', marker: { color: '#4ECDC4' } }
+            ], baseLayout({
+            barmode: 'group',
+            height: heightBarsVertical({ min: 520, max: 720 }),
+            xaxis: { title: '' },
+            yaxis: { title: 'Sales (€)' }
+            }), plotlyConfig());
+        }
         }
         
         // =============================
         // RENDER TABLES
         // =============================
         function renderTables() {
-            console.log("🔄 renderTables called");
-            console.log("=== DEBUG: renderTables CALLED ===");
-            console.log("filteredComparativa length:", filteredComparativa.length);
-            
             // Comparison table
-            const compBody = $('comparisonBody');
+            const compBody = el('comparisonBody');
             if (compBody) {
                 compBody.innerHTML = '';
                 
@@ -1390,7 +1604,7 @@
             }
             
             // Only P1 table
-            const onlyP1Body = $('onlyP1Body');
+            const onlyP1Body = el('onlyP1Body');
             if (onlyP1Body) {
                 onlyP1Body.innerHTML = '';
                 
@@ -1425,7 +1639,7 @@
             }
             
             // Only P2 table
-            const onlyP2Body = $('onlyP2Body');
+            const onlyP2Body = el('onlyP2Body');
             if (onlyP2Body) {
                 onlyP2Body.innerHTML = '';
                 
@@ -1460,7 +1674,7 @@
             }
             
             // Common table
-            const commonBody = $('commonBody');
+            const commonBody = el('commonBody');
             if (commonBody) {
                 commonBody.innerHTML = '';
                 
@@ -1508,11 +1722,11 @@
             const total = comparativaData.length;
             const shown = filteredComparativa.length;
             
-            if ($('resultCount')) {
-                $('resultCount').textContent = `Showing ${shown} of ${total} records`;
+            if (el('resultCount')) {
+                el('resultCount').textContent = `Showing ${shown} of ${total} records`;
             }
             
-            if (!$('activeChips')) return;
+            if (!el('activeChips')) return;
             
             const chips = [];
             
@@ -1533,12 +1747,12 @@
                 selectedReps.forEach(v => chips.push(`Rep:${v}`));
             }
             
-            $('activeChips').innerHTML = '';
+            el('activeChips').innerHTML = '';
             chips.forEach(c => {
                 const span = document.createElement('span');
                 span.className = 'active-chip';
                 span.textContent = c;
-                $('activeChips').appendChild(span);
+                el('activeChips').appendChild(span);
             });
         }
         
@@ -1560,19 +1774,19 @@
             
             switch(tableId) {
                 case 'comparison':
-                    tableElement = $('comparisonTable');
+                    tableElement = el('comparisonTable');
                     bodyId = 'comparisonBody';
                     break;
                 case 'onlyP1':
-                    tableElement = $('onlyP1Table');
+                    tableElement = el('onlyP1Table');
                     bodyId = 'onlyP1Body';
                     break;
                 case 'onlyP2':
-                    tableElement = $('onlyP2Table');
+                    tableElement = el('onlyP2Table');
                     bodyId = 'onlyP2Body';
                     break;
                 case 'common':
-                    tableElement = $('commonTable');
+                    tableElement = el('commonTable');
                     bodyId = 'commonBody';
                     break;
             }
@@ -1587,7 +1801,7 @@
                 }
             });
             
-            const tbody = $(bodyId);
+            const tbody = el(bodyId);
             if (!tbody) return;
             
             const rows = Array.from(tbody.querySelectorAll('tr'));
@@ -1618,30 +1832,46 @@
         // BOOT
         // =============================
         $(document).ready(function() {
-            console.log("=== DEBUG: DOCUMENT READY ===");
-            
-            initializeFilters();
-            
-            console.log("Filters initialized, calling applyFilters...");
-            applyFilters();
-            
-            // Resize Plotly charts when tab is shown
-            $('a[data-toggle="tab"]').on('shown.bs.tab', function (e) {
-                console.log("Tab shown:", e.target);
-                const targetId = $(e.target).attr('href');
-                console.log("Target tab:", targetId);
-                const plotDiv = $(targetId).find('.plotly-graph-div')[0];
-                console.log("Plot div found:", !!plotDiv);
-                if (plotDiv) {
-                    Plotly.Plots.resize(plotDiv);
-                }
-            });
-            
-            // 🔍 DEBUG: Verificar tabs activas
-            console.log("Active chart tab:", $('#chartsTab .nav-link.active').text());
-            console.log("Active table tab:", $('#dataTablesTab .nav-link.active').text());
-            console.log("Visible chart pane:", $('#chartsTabContent .tab-pane.active').attr('id'));
-            console.log("Visible table pane:", $('#dataTablesContent .tab-pane.active').attr('id'));
+        initializeFilters();
+        applyFilters(); // ya renderiza charts
+
+        setTimeout(() => {
+            resizeVisibleCharts($('#chartsTabContent .tab-pane.active'));
+            forceResizeByIds(['chartReps']); // el primero
+        }, 0);
+
+        $('#chartsTab a[data-toggle="tab"]').on('shown.bs.tab', function (e) {
+        const targetId = $(e.target).attr('href'); // #reps-chart, #types-chart...
+        const $pane = $(targetId);
+
+        // IDs de charts por pestaña
+        const map = {
+            '#reps-chart':  ['chartReps'],
+            '#types-chart': ['chartTypes'],
+            '#sets-chart':  ['chartSets'],
+            '#time-chart':  ['chartTime']
+        };
+
+        const ids = map[targetId] || [];
+
+        function fix() {
+            // 1) por pane (por si hay más de un plot)
+            resizeVisibleCharts($pane);
+
+            // 2) por ID (más directo y fiable)
+            forceResizeByIds(ids);
+        }
+
+        // Bootstrap anima el tab: hay que pillar varios "ticks"
+        requestAnimationFrame(fix);
+        setTimeout(fix, 50);
+        setTimeout(fix, 180);
+        setTimeout(fix, 450);
+        });
+
+        $(window).on('resize', function () {
+            resizeVisibleCharts($('.tab-content'));
+        });
         });
     </script>
 </body>

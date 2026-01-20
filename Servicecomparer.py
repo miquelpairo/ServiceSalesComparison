@@ -10,6 +10,14 @@ import plotly.express as px
 import plotly.graph_objects as go
 from buchi_streamlit_theme import apply_buchi_styles
 from sales_comparison_report_generator import generate_sales_comparison_html
+from column_mappings import (
+    detect_format, 
+    get_mapping_for_format, 
+    get_additional_columns,
+    validate_format,
+    get_format_info,
+    REQUIRED_COLUMNS
+)
 
 # Configure logging
 logging.basicConfig(
@@ -121,35 +129,78 @@ st.markdown("---")
 # ============================================================================
 
 @st.cache_data
+@st.cache_data
 def load_file(file):
-    """Load file - identical to Service Planning Dashboard approach"""
+    """Load file and apply format detection and mapping"""
     if file is not None:
         try:
+            # Load raw data
             if file.name.endswith(".csv"):
                 df = pd.read_csv(file, encoding='utf-8')
             else:
                 df = pd.read_excel(file)
             
+            logger.info(f"File loaded: {len(df)} rows, {len(df.columns)} columns")
+            logger.info(f"Available columns: {df.columns.tolist()}")
+            
+            # Detect format
+            format_type = detect_format(df.columns.tolist())
+            logger.info(f"Detected format: {format_type}")
+            
+            if format_type == 'unknown':
+                st.error("❌ **Unknown file format detected**")
+                st.error(f"Available columns: {', '.join(df.columns.tolist())}")
+                st.info("💡 This application supports Power BI exports in original or new multi-currency format")
+                return None
+            
+            # Show format info
+            format_info = get_format_info(format_type)
+            st.sidebar.success(f"✅ **{format_info['name']}** detected")
+            st.sidebar.info(f"📊 {format_info['description']}")
+            st.sidebar.caption(f"💰 Currency: {format_info['currency']}")
+            
+            # Validate format
+            is_valid, missing_cols = validate_format(df, format_type)
+            if not is_valid:
+                st.error(f"❌ Missing required columns for {format_type} format: {', '.join(missing_cols)}")
+                return None
+            
+            # Apply column mapping
+            mapping = get_mapping_for_format(format_type)
+            reverse_mapping = {v: k for k, v in mapping.items()}
+            
+            # Rename columns to standardized names
+            df = df.rename(columns=reverse_mapping)
+            
+            logger.info("Column mapping applied successfully")
+            logger.info(f"Standardized columns: {df.columns.tolist()}")
+            
+            # Process dates
             df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
             df['Year'] = df['Date'].dt.year
             df['Month'] = df['Date'].dt.month
             df['Month_Name'] = df['Date'].dt.strftime('%B')
             
+            # Store format type in session state
+            st.session_state.file_format = format_type
+            
             return df
+            
         except Exception as e:
             st.error(f"❌ Error loading file: {str(e)}")
+            logger.error(f"Error loading file: {str(e)}", exc_info=True)
             return None
     return None
 
 def validate_dataframe(df, required_columns):
-    """Validate that DataFrame has required columns"""
+    """Validate that DataFrame has required columns (already mapped)"""
     missing_cols = [col for col in required_columns if col not in df.columns]
     if missing_cols:
-        st.error(f"❌ Missing required columns: {', '.join(missing_cols)}")
-        st.info("📋 Available columns: " + ", ".join(df.columns.tolist()))
-        logger.warning(f"Missing columns: {missing_cols}")
+        st.error(f"❌ Missing required standardized columns: {', '.join(missing_cols)}")
+        st.info("📋 Available standardized columns: " + ", ".join(df.columns.tolist()))
+        logger.warning(f"Missing standardized columns: {missing_cols}")
         return False
-    logger.info("All required columns present")
+    logger.info("All required standardized columns present")
     return True
 
 def safe_date_conversion(df, col_fecha):
@@ -281,11 +332,8 @@ if uploaded_file:
     
     st.sidebar.success(f"✅ {len(df):,} records loaded")
     
-    # Validate required columns
-    required_cols = ['Date', 'Business Partner Name', 'ItemIdAndName', 'ProductType', 
-                     'Qty', 'EUR', 'SalesRepresentative', 'Set', 'Productline']
-    
-    if not validate_dataframe(df, required_cols):
+    # Validate required columns (now using standardized names from mapping)
+    if not validate_dataframe(df, REQUIRED_COLUMNS):
         st.stop()
     
     # Get available options for filters
@@ -308,6 +356,15 @@ if uploaded_file:
         st.session_state["search_filter"] = ""
         st.session_state["customer_filter"] = ""
         st.session_state["selected_quick_filters"] = []
+                # Reset new filters (only if they exist)
+        if 'Market Organization Name' in df.columns:
+            st.session_state["mo_filter"] = sorted(df['Market Organization Name'].dropna().unique().tolist())
+        if 'Sales Territory' in df.columns:
+            st.session_state["ter_filter"] = sorted(df['Sales Territory'].dropna().unique().tolist())
+        if 'Country' in df.columns:
+            st.session_state["country_filter"] = sorted(df['Country'].dropna().unique().tolist())
+        if 'End User Segment' in df.columns:
+            st.session_state["seg_filter"] = sorted(df['End User Segment'].dropna().unique().tolist())
     
     # =========================================================================
     # SIDEBAR: FILTERS (COLLAPSIBLE)
@@ -426,6 +483,109 @@ if uploaded_file:
             label_visibility="collapsed"
         )
     
+
+    # Market Organization filter - COLLAPSIBLE
+    with st.sidebar.expander("🏢 Market Organization", expanded=False):
+        # Get available market organizations (only if column exists)
+        available_market_orgs = []
+        if 'Market Organization Name' in df.columns:
+            available_market_orgs = sorted(df['Market Organization Name'].dropna().unique().tolist())
+        
+        if available_market_orgs:
+            col_mo1, col_mo2 = st.sidebar.columns(2)
+            with col_mo1:
+                st.button("✅ All", key="mo_all", use_container_width=True,
+                         on_click=lambda: st.session_state.update({"mo_filter": available_market_orgs}))
+            with col_mo2:
+                st.button("❌ None", key="mo_none", use_container_width=True,
+                         on_click=lambda: st.session_state.update({"mo_filter": []}))
+            
+            selected_market_orgs = st.multiselect(
+                "Select market organizations",
+                available_market_orgs,
+                default=available_market_orgs,
+                key="mo_filter",
+                label_visibility="collapsed"
+            )
+        else:
+            st.info("Not available in this file format")
+    
+    # Sales Territory filter - COLLAPSIBLE
+    with st.sidebar.expander("🌍 Sales Territory", expanded=False):
+        available_territories = []
+        if 'Sales Territory' in df.columns:
+            available_territories = sorted(df['Sales Territory'].dropna().unique().tolist())
+        
+        if available_territories:
+            col_ter1, col_ter2 = st.sidebar.columns(2)
+            with col_ter1:
+                st.button("✅ All", key="ter_all", use_container_width=True,
+                         on_click=lambda: st.session_state.update({"ter_filter": available_territories}))
+            with col_ter2:
+                st.button("❌ None", key="ter_none", use_container_width=True,
+                         on_click=lambda: st.session_state.update({"ter_filter": []}))
+            
+            selected_territories = st.multiselect(
+                "Select territories",
+                available_territories,
+                default=available_territories,
+                key="ter_filter",
+                label_visibility="collapsed"
+            )
+        else:
+            st.info("Not available in this file format")
+    
+    # Country filter - COLLAPSIBLE
+    with st.sidebar.expander("🌎 Country", expanded=False):
+        available_countries = []
+        if 'Country' in df.columns:
+            available_countries = sorted(df['Country'].dropna().unique().tolist())
+        
+        if available_countries:
+            col_country1, col_country2 = st.sidebar.columns(2)
+            with col_country1:
+                st.button("✅ All", key="country_all", use_container_width=True,
+                         on_click=lambda: st.session_state.update({"country_filter": available_countries}))
+            with col_country2:
+                st.button("❌ None", key="country_none", use_container_width=True,
+                         on_click=lambda: st.session_state.update({"country_filter": []}))
+            
+            selected_countries = st.multiselect(
+                "Select countries",
+                available_countries,
+                default=available_countries,
+                key="country_filter",
+                label_visibility="collapsed"
+            )
+        else:
+            st.info("Not available in this file format")
+    
+    # End User Segment filter - COLLAPSIBLE
+    with st.sidebar.expander("👥 End User Segment", expanded=False):
+        available_segments = []
+        if 'End User Segment' in df.columns:
+            available_segments = sorted(df['End User Segment'].dropna().unique().tolist())
+        
+        if available_segments:
+            col_seg1, col_seg2 = st.sidebar.columns(2)
+            with col_seg1:
+                st.button("✅ All", key="seg_all", use_container_width=True,
+                         on_click=lambda: st.session_state.update({"seg_filter": available_segments}))
+            with col_seg2:
+                st.button("❌ None", key="seg_none", use_container_width=True,
+                         on_click=lambda: st.session_state.update({"seg_filter": []}))
+            
+            selected_segments = st.multiselect(
+                "Select segments",
+                available_segments,
+                default=available_segments,
+                key="seg_filter",
+                label_visibility="collapsed"
+            )
+        else:
+            st.info("Not available in this file format")
+
+
     # RESET BUTTON
     st.sidebar.markdown("---")
     st.sidebar.button(
@@ -466,34 +626,59 @@ if uploaded_file:
         'Productline': 'Productline'
     }
     
-    # Detect columns
-    col_fecha = default_cols['Date'] if default_cols['Date'] in df.columns else df.columns[0]
-    col_cliente = default_cols['Customer'] if default_cols['Customer'] in df.columns else df.columns[0]
-    col_producto = default_cols['Product'] if default_cols['Product'] in df.columns else df.columns[0]
-    col_tipo = default_cols['Product Type'] if default_cols['Product Type'] in df.columns else df.columns[0]
-    col_cantidad = default_cols['Quantity'] if default_cols['Quantity'] in df.columns else df.columns[0]
-    col_precio = default_cols['Amount'] if default_cols['Amount'] in df.columns else df.columns[0]
-    col_sales_rep = default_cols['SalesRepresentative'] if default_cols['SalesRepresentative'] in df.columns else df.columns[0]
-    col_set = default_cols['Set'] if default_cols['Set'] in df.columns else df.columns[0]
-    col_productline = default_cols['Productline'] if default_cols['Productline'] in df.columns else df.columns[0]
+    # =========================================================================
+    # COLUMN ASSIGNMENT (Now automatic via mapping)
+    # =========================================================================
+    st.markdown("---")
+    st.markdown('<div class="section-header">🛠️ Column Assignment</div>', unsafe_allow_html=True)
     
-    st.success(f"✅ Columns detected automatically.")
+    # Get format info
+    format_type = st.session_state.get('file_format', 'unknown')
+    format_info = get_format_info(format_type)
     
-    with st.expander("🔍 View detected columns", expanded=False):
-        st.markdown("**Detected columns:**")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.write(f"- Date: `{col_fecha}`")
-            st.write(f"- Customer: `{col_cliente}`")
-            st.write(f"- Product: `{col_producto}`")
-        with col2:
-            st.write(f"- Type: `{col_tipo}`")
-            st.write(f"- Quantity: `{col_cantidad}`")
-            st.write(f"- Amount: `{col_precio}`")
-        with col3:
-            st.write(f"- Sales Rep: `{col_sales_rep}`")
-            st.write(f"- Set: `{col_set}`")
-            st.write(f"- Productline: `{col_productline}`")
+    st.success(f"✅ **Columns mapped automatically** using **{format_info['name']}**")
+    
+    # Assign standardized column names (already mapped by load_file)
+    col_fecha = 'Date'
+    col_cliente = 'Business Partner Name'
+    col_producto = 'ItemIdAndName'
+    col_tipo = 'ProductType'
+    col_cantidad = 'Qty'
+    col_precio = 'EUR'  # This is now mapped from LC or EUR depending on format
+    col_sales_rep = 'SalesRepresentative'
+    col_set = 'Set'
+    col_productline = 'Productline'
+    
+    with st.expander("🔍 View column mapping details", expanded=False):
+        st.markdown("**Column mapping applied:**")
+        
+        mapping = get_mapping_for_format(format_type)
+        
+        if mapping is not None:
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown("**Standardized Name**")
+                for std_name in mapping.keys():
+                    st.write(f"- {std_name}")
+            with col2:
+                st.markdown(f"**Original Name ({format_info['name']})**")
+                for orig_name in mapping.values():
+                    st.write(f"- `{orig_name}`")
+            
+            # Show additional columns preserved
+            additional_cols = get_additional_columns(format_type)
+            if additional_cols:
+                st.markdown("---")
+                st.markdown("**📦 Additional columns preserved:**")
+                preserved = [col for col in additional_cols if col in df.columns]
+                if preserved:
+                    st.write(", ".join([f"`{col}`" for col in preserved]))
+                else:
+                    st.write("None")
+        else:
+            st.warning("⚠️ Mapping information not available")
+            st.write(f"**Current columns in DataFrame:**")
+            st.write(", ".join([f"`{col}`" for col in df.columns.tolist()]))
     
     # Format dates safely
     df = safe_date_conversion(df, col_fecha)
@@ -841,7 +1026,41 @@ if uploaded_file:
         df1_filtrado = df1_filtrado[df1_filtrado[col_cliente].str.contains(customer_search, case=False, na=False)]
         df2_filtrado = df2_filtrado[df2_filtrado[col_cliente].str.contains(customer_search, case=False, na=False)]
         logger.info(f"Customer filter applied: '{customer_search}'")
+
+
+    # Apply Market Organization filter
+    if 'Market Organization Name' in df1_filtrado.columns and 'mo_filter' in st.session_state:
+        selected_market_orgs = st.session_state.get('mo_filter', [])
+        if selected_market_orgs and len(selected_market_orgs) > 0:
+            df1_filtrado = df1_filtrado[df1_filtrado['Market Organization Name'].isin(selected_market_orgs)]
+            df2_filtrado = df2_filtrado[df2_filtrado['Market Organization Name'].isin(selected_market_orgs)]
+            logger.info(f"Market Organization filter applied: {selected_market_orgs}")
     
+    # Apply Sales Territory filter
+    if 'Sales Territory' in df1_filtrado.columns and 'ter_filter' in st.session_state:
+        selected_territories = st.session_state.get('ter_filter', [])
+        if selected_territories and len(selected_territories) > 0:
+            df1_filtrado = df1_filtrado[df1_filtrado['Sales Territory'].isin(selected_territories)]
+            df2_filtrado = df2_filtrado[df2_filtrado['Sales Territory'].isin(selected_territories)]
+            logger.info(f"Sales Territory filter applied: {selected_territories}")
+    
+    # Apply Country filter
+    if 'Country' in df1_filtrado.columns and 'country_filter' in st.session_state:
+        selected_countries = st.session_state.get('country_filter', [])
+        if selected_countries and len(selected_countries) > 0:
+            df1_filtrado = df1_filtrado[df1_filtrado['Country'].isin(selected_countries)]
+            df2_filtrado = df2_filtrado[df2_filtrado['Country'].isin(selected_countries)]
+            logger.info(f"Country filter applied: {selected_countries}")
+    
+    # Apply End User Segment filter
+    if 'End User Segment' in df1_filtrado.columns and 'seg_filter' in st.session_state:
+        selected_segments = st.session_state.get('seg_filter', [])
+        if selected_segments and len(selected_segments) > 0:
+            df1_filtrado = df1_filtrado[df1_filtrado['End User Segment'].isin(selected_segments)]
+            df2_filtrado = df2_filtrado[df2_filtrado['End User Segment'].isin(selected_segments)]
+            logger.info(f"End User Segment filter applied: {selected_segments}")
+
+
     # Show filtering summary
     st.success(f"✅ **Filters applied:** {len(df1_filtrado):,} records in {nombre_periodo_1}, {len(df2_filtrado):,} records in {nombre_periodo_2}")
     
@@ -865,6 +1084,7 @@ if uploaded_file:
         df2_filtrado["Amount"] = df2_filtrado[col_precio]
     
     # Group by customer, product, sales representative, set and productline
+    # Group by customer, product, sales representative, set and productline
     with st.spinner("🔄 Processing data and generating comparison..."):
         progress_bar = st.progress(0)
         
@@ -873,24 +1093,59 @@ if uploaded_file:
         grouped_1 = df1_filtrado.groupby([col_cliente, col_producto, col_sales_rep, col_set, col_productline, col_tipo]).agg({
             col_cantidad: "sum",
             "Amount": "sum"
-        }).rename(columns={col_cantidad: f"Quantity {nombre_periodo_1}", "Amount": f"Amount {nombre_periodo_1}"})
+        })
+        # Rename columns explicitly BEFORE merge
+        grouped_1.columns = [f"Quantity {nombre_periodo_1}", f"Amount {nombre_periodo_1}"]
+        
+        # Debug
+        logger.info(f"Grouped_1 columns: {grouped_1.columns.tolist()}")
         
         # Group period 2
         progress_bar.progress(50)
         grouped_2 = df2_filtrado.groupby([col_cliente, col_producto, col_sales_rep, col_set, col_productline, col_tipo]).agg({
             col_cantidad: "sum",
             "Amount": "sum"
-        }).rename(columns={col_cantidad: f"Quantity {nombre_periodo_2}", "Amount": f"Amount {nombre_periodo_2}"})
+        })
+        # Rename columns explicitly BEFORE merge
+        grouped_2.columns = [f"Quantity {nombre_periodo_2}", f"Amount {nombre_periodo_2}"]
         
-        # Create comparison
+        # Debug
+        logger.info(f"Grouped_2 columns: {grouped_2.columns.tolist()}")
+        
+        # Create comparison - now column names are already unique so no _x/_y suffixes
         progress_bar.progress(75)
-        comparativa = pd.merge(grouped_1, grouped_2, how="outer", left_index=True, right_index=True).fillna(0)
-        comparativa["Quantity Difference"] = comparativa[f"Quantity {nombre_periodo_2}"] - comparativa[f"Quantity {nombre_periodo_1}"]
-        comparativa["Amount Difference"] = comparativa[f"Amount {nombre_periodo_2}"] - comparativa[f"Amount {nombre_periodo_1}"]
+        comparativa = pd.merge(
+            grouped_1, 
+            grouped_2, 
+            how="outer", 
+            left_index=True, 
+            right_index=True,
+            suffixes=('', '')  # No suffixes needed since names are already unique
+        ).fillna(0)
+        
+        # Debug - show what columns we actually have
+        logger.info(f"Comparativa columns after merge: {comparativa.columns.tolist()}")
+        st.caption(f"🔍 Debug: Comparativa columns = {comparativa.columns.tolist()}")
+        
+        # Now calculate differences - column names should be correct
+        qty_col_1 = f"Quantity {nombre_periodo_1}"
+        qty_col_2 = f"Quantity {nombre_periodo_2}"
+        amt_col_1 = f"Amount {nombre_periodo_1}"
+        amt_col_2 = f"Amount {nombre_periodo_2}"
+        
+        # Verify columns exist before accessing
+        if qty_col_1 not in comparativa.columns or qty_col_2 not in comparativa.columns:
+            st.error(f"❌ ERROR: Expected columns not found!")
+            st.error(f"Looking for: '{qty_col_1}' and '{qty_col_2}'")
+            st.error(f"Available columns: {comparativa.columns.tolist()}")
+            st.stop()
+        
+        comparativa["Quantity Difference"] = comparativa[qty_col_2] - comparativa[qty_col_1]
+        comparativa["Amount Difference"] = comparativa[amt_col_2] - comparativa[amt_col_1]
         
         # Calculate growth percentage
-        comparativa["Growth %"] = ((comparativa[f"Amount {nombre_periodo_2}"] - comparativa[f"Amount {nombre_periodo_1}"]) / 
-                                   comparativa[f"Amount {nombre_periodo_1}"] * 100)
+        comparativa["Growth %"] = ((comparativa[amt_col_2] - comparativa[amt_col_1]) / 
+                                comparativa[amt_col_1] * 100)
         comparativa["Growth %"] = comparativa["Growth %"].replace([float('inf'), -float('inf')], 0)
         
         progress_bar.progress(100)
@@ -995,7 +1250,7 @@ if uploaded_file:
     # =========================================================================
     st.markdown("---")
     st.markdown('<div class="section-header">📊 Comparative Analysis</div>', unsafe_allow_html=True)
-    
+
     # Total comparison at top
     st.markdown("### 💰 Overall Comparison")
     col1, col2 = st.columns(2)
@@ -1003,187 +1258,184 @@ if uploaded_file:
         st.metric(f"Total {nombre_periodo_1}", f"€{total_periodo_1:,.2f}")
     with col2:
         st.metric(f"Total {nombre_periodo_2}", f"€{total_periodo_2:,.2f}", delta=f"€{diferencia_total:,.2f}")
-    
+
     st.markdown("---")
-    
-    # Comparison by Sales Representative
-    st.markdown("### 👤 Comparison by Sales Representative")
-    rep_comparison = pd.DataFrame({
-        nombre_periodo_1: df1_filtrado.groupby(col_sales_rep)[col_precio].sum(),
-        nombre_periodo_2: df2_filtrado.groupby(col_sales_rep)[col_precio].sum()
-    }).fillna(0).reset_index()
-    rep_comparison = rep_comparison.sort_values(nombre_periodo_2, ascending=True)
-    
-    fig_rep = go.Figure()
-    fig_rep.add_trace(go.Bar(
-        name=nombre_periodo_1,
-        y=rep_comparison[col_sales_rep],
-        x=rep_comparison[nombre_periodo_1],
-        orientation='h',
-        marker=dict(color='#FF6B6B'),
-        text=rep_comparison[nombre_periodo_1].apply(lambda x: f'€{x:,.0f}'),
-        textposition='auto',
-    ))
-    fig_rep.add_trace(go.Bar(
-        name=nombre_periodo_2,
-        y=rep_comparison[col_sales_rep],
-        x=rep_comparison[nombre_periodo_2],
-        orientation='h',
-        marker=dict(color='#4ECDC4'),
-        text=rep_comparison[nombre_periodo_2].apply(lambda x: f'€{x:,.0f}'),
-        textposition='auto',
-    ))
-    fig_rep.update_layout(
-        barmode='group',
-        height=max(400, len(rep_comparison) * 40),
-        xaxis_title="Sales (€)",
-        yaxis_title="",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-    )
-    st.plotly_chart(fig_rep, use_container_width=True)
-    
-    st.markdown("---")
-    
-    # Comparison by Product Type
-    st.markdown("### 🏷️ Comparison by Product Type")
-    type_comparison = pd.DataFrame({
-        nombre_periodo_1: df1_filtrado.groupby(col_tipo)[col_precio].sum(),
-        nombre_periodo_2: df2_filtrado.groupby(col_tipo)[col_precio].sum()
-    }).fillna(0).reset_index()
-    type_comparison = type_comparison.sort_values(nombre_periodo_2, ascending=True)
-    
-    fig_type = go.Figure()
-    fig_type.add_trace(go.Bar(
-        name=nombre_periodo_1,
-        y=type_comparison[col_tipo],
-        x=type_comparison[nombre_periodo_1],
-        orientation='h',
-        marker=dict(color='#FF6B6B'),
-        text=type_comparison[nombre_periodo_1].apply(lambda x: f'€{x:,.0f}'),
-        textposition='auto',
-    ))
-    fig_type.add_trace(go.Bar(
-        name=nombre_periodo_2,
-        y=type_comparison[col_tipo],
-        x=type_comparison[nombre_periodo_2],
-        orientation='h',
-        marker=dict(color='#4ECDC4'),
-        text=type_comparison[nombre_periodo_2].apply(lambda x: f'€{x:,.0f}'),
-        textposition='auto',
-    ))
-    fig_type.update_layout(
-        barmode='group',
-        height=max(400, len(type_comparison) * 40),
-        xaxis_title="Sales (€)",
-        yaxis_title="",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-    )
-    st.plotly_chart(fig_type, use_container_width=True)
-    
-    st.markdown("---")
-    
-    # Comparison by Set
-    st.markdown("### 📦 Comparison by Set")
-    set_comparison = pd.DataFrame({
-        nombre_periodo_1: df1_filtrado.groupby(col_set)[col_precio].sum(),
-        nombre_periodo_2: df2_filtrado.groupby(col_set)[col_precio].sum()
-    }).fillna(0).reset_index()
-    set_comparison = set_comparison.sort_values(nombre_periodo_2, ascending=True)
-    
-    fig_set = go.Figure()
-    fig_set.add_trace(go.Bar(
-        name=nombre_periodo_1,
-        y=set_comparison[col_set],
-        x=set_comparison[nombre_periodo_1],
-        orientation='h',
-        marker=dict(color='#FF6B6B'),
-        text=set_comparison[nombre_periodo_1].apply(lambda x: f'€{x:,.0f}'),
-        textposition='auto',
-    ))
-    fig_set.add_trace(go.Bar(
-        name=nombre_periodo_2,
-        y=set_comparison[col_set],
-        x=set_comparison[nombre_periodo_2],
-        orientation='h',
-        marker=dict(color='#4ECDC4'),
-        text=set_comparison[nombre_periodo_2].apply(lambda x: f'€{x:,.0f}'),
-        textposition='auto',
-    ))
-    fig_set.update_layout(
-        barmode='group',
-        height=max(400, len(set_comparison) * 50),
-        xaxis_title="Sales (€)",
-        yaxis_title="",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-    )
-    st.plotly_chart(fig_set, use_container_width=True)
-    
+
+    # REEMPLAZA TODO EL CÓDIGO DESDE AQUÍ HASTA "TOP 10 ANALYSIS" CON ESTO:
+
     # =========================================================================
-    # PERFORMANCE OVER TIME (Month-by-Month: Jan P1 vs Jan P2, etc.)
+    # TABS FOR COMPARATIVE VISUALIZATIONS
     # =========================================================================
-    st.markdown("---")
-    st.markdown('<div class="section-header">📈 Performance Over Time</div>', unsafe_allow_html=True)
+    tab1, tab2, tab3, tab4 = st.tabs(["👤 Sales Rep", "🏷️ Product Type", "📦 Set", "📈 Performance Over Time"])
 
-    df1m = df1_filtrado.copy()
-    df2m = df2_filtrado.copy()
+    with tab1:
+        st.markdown("#### Comparison by Sales Representative")
+        rep_comparison = pd.DataFrame({
+            nombre_periodo_1: df1_filtrado.groupby(col_sales_rep)[col_precio].sum(),
+            nombre_periodo_2: df2_filtrado.groupby(col_sales_rep)[col_precio].sum()
+        }).fillna(0).reset_index()
+        rep_comparison = rep_comparison.sort_values(nombre_periodo_2, ascending=True)
+        
+        fig_rep = go.Figure()
+        fig_rep.add_trace(go.Bar(
+            name=nombre_periodo_1,
+            y=rep_comparison[col_sales_rep],
+            x=rep_comparison[nombre_periodo_1],
+            orientation='h',
+            marker=dict(color='#FF6B6B'),
+            text=rep_comparison[nombre_periodo_1].apply(lambda x: f'€{x:,.0f}'),
+            textposition='auto',
+        ))
+        fig_rep.add_trace(go.Bar(
+            name=nombre_periodo_2,
+            y=rep_comparison[col_sales_rep],
+            x=rep_comparison[nombre_periodo_2],
+            orientation='h',
+            marker=dict(color='#4ECDC4'),
+            text=rep_comparison[nombre_periodo_2].apply(lambda x: f'€{x:,.0f}'),
+            textposition='auto',
+        ))
+        fig_rep.update_layout(
+            barmode='group',
+            height=max(400, len(rep_comparison) * 40),
+            xaxis_title="Sales (€)",
+            yaxis_title="",
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+        )
+        st.plotly_chart(fig_rep, use_container_width=True)
 
-    df1m["_DateDT"] = pd.to_datetime(df1m[col_fecha], errors="coerce")
-    df2m["_DateDT"] = pd.to_datetime(df2m[col_fecha], errors="coerce")
-    df1m = df1m.dropna(subset=["_DateDT"])
-    df2m = df2m.dropna(subset=["_DateDT"])
+    with tab2:
+        st.markdown("#### Comparison by Product Type")
+        type_comparison = pd.DataFrame({
+            nombre_periodo_1: df1_filtrado.groupby(col_tipo)[col_precio].sum(),
+            nombre_periodo_2: df2_filtrado.groupby(col_tipo)[col_precio].sum()
+        }).fillna(0).reset_index()
+        type_comparison = type_comparison.sort_values(nombre_periodo_2, ascending=True)
+        
+        fig_type = go.Figure()
+        fig_type.add_trace(go.Bar(
+            name=nombre_periodo_1,
+            y=type_comparison[col_tipo],
+            x=type_comparison[nombre_periodo_1],
+            orientation='h',
+            marker=dict(color='#FF6B6B'),
+            text=type_comparison[nombre_periodo_1].apply(lambda x: f'€{x:,.0f}'),
+            textposition='auto',
+        ))
+        fig_type.add_trace(go.Bar(
+            name=nombre_periodo_2,
+            y=type_comparison[col_tipo],
+            x=type_comparison[nombre_periodo_2],
+            orientation='h',
+            marker=dict(color='#4ECDC4'),
+            text=type_comparison[nombre_periodo_2].apply(lambda x: f'€{x:,.0f}'),
+            textposition='auto',
+        ))
+        fig_type.update_layout(
+            barmode='group',
+            height=max(400, len(type_comparison) * 40),
+            xaxis_title="Sales (€)",
+            yaxis_title="",
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+        )
+        st.plotly_chart(fig_type, use_container_width=True)
 
-    # Mes del año 1..12
-    df1m["MonthNum"] = df1m["_DateDT"].dt.month
-    df2m["MonthNum"] = df2m["_DateDT"].dt.month
+    with tab3:
+        st.markdown("#### Comparison by Set")
+        set_comparison = pd.DataFrame({
+            nombre_periodo_1: df1_filtrado.groupby(col_set)[col_precio].sum(),
+            nombre_periodo_2: df2_filtrado.groupby(col_set)[col_precio].sum()
+        }).fillna(0).reset_index()
+        set_comparison = set_comparison.sort_values(nombre_periodo_2, ascending=True)
+        
+        fig_set = go.Figure()
+        fig_set.add_trace(go.Bar(
+            name=nombre_periodo_1,
+            y=set_comparison[col_set],
+            x=set_comparison[nombre_periodo_1],
+            orientation='h',
+            marker=dict(color='#FF6B6B'),
+            text=set_comparison[nombre_periodo_1].apply(lambda x: f'€{x:,.0f}'),
+            textposition='auto',
+        ))
+        fig_set.add_trace(go.Bar(
+            name=nombre_periodo_2,
+            y=set_comparison[col_set],
+            x=set_comparison[nombre_periodo_2],
+            orientation='h',
+            marker=dict(color='#4ECDC4'),
+            text=set_comparison[nombre_periodo_2].apply(lambda x: f'€{x:,.0f}'),
+            textposition='auto',
+        ))
+        fig_set.update_layout(
+            barmode='group',
+            height=max(400, len(set_comparison) * 50),
+            xaxis_title="Sales (€)",
+            yaxis_title="",
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+        )
+        st.plotly_chart(fig_set, use_container_width=True)
 
-    monthly_p1 = df1m.groupby("MonthNum")[col_precio].sum().reset_index()
-    monthly_p1.columns = ["MonthNum", nombre_periodo_1]
+    with tab4:
+        st.markdown("#### Month-by-Month Sales (Jan vs Jan, Feb vs Feb, ...)")
+        
+        df1m = df1_filtrado.copy()
+        df2m = df2_filtrado.copy()
 
-    monthly_p2 = df2m.groupby("MonthNum")[col_precio].sum().reset_index()
-    monthly_p2.columns = ["MonthNum", nombre_periodo_2]
+        df1m["_DateDT"] = pd.to_datetime(df1m[col_fecha], errors="coerce")
+        df2m["_DateDT"] = pd.to_datetime(df2m[col_fecha], errors="coerce")
+        df1m = df1m.dropna(subset=["_DateDT"])
+        df2m = df2m.dropna(subset=["_DateDT"])
 
-    monthly_combined = pd.merge(monthly_p1, monthly_p2, on="MonthNum", how="outer").fillna(0)
-    monthly_combined = monthly_combined.sort_values("MonthNum")
+        df1m["MonthNum"] = df1m["_DateDT"].dt.month
+        df2m["MonthNum"] = df2m["_DateDT"].dt.month
 
-    # Etiquetas de meses
-    month_labels_full = {
-        1: "January", 2: "February", 3: "March", 4: "April",
-        5: "May", 6: "June", 7: "July", 8: "August",
-        9: "September", 10: "October", 11: "November", 12: "December"
-    }
-    monthly_combined["MonthLabel"] = monthly_combined["MonthNum"].map(month_labels_full)
+        monthly_p1 = df1m.groupby("MonthNum")[col_precio].sum().reset_index()
+        monthly_p1.columns = ["MonthNum", nombre_periodo_1]
 
-    fig_time = go.Figure()
+        monthly_p2 = df2m.groupby("MonthNum")[col_precio].sum().reset_index()
+        monthly_p2.columns = ["MonthNum", nombre_periodo_2]
 
-    fig_time.add_trace(go.Bar(
-        name=nombre_periodo_1,
-        x=monthly_combined["MonthLabel"],
-        y=monthly_combined[nombre_periodo_1],
-        marker=dict(color="#FF6B6B"),
-        text=monthly_combined[nombre_periodo_1].apply(lambda x: f"€{x:,.0f}" if x > 0 else ""),
-        textposition="outside",
-    ))
+        monthly_combined = pd.merge(monthly_p1, monthly_p2, on="MonthNum", how="outer").fillna(0)
+        monthly_combined = monthly_combined.sort_values("MonthNum")
 
-    fig_time.add_trace(go.Bar(
-        name=nombre_periodo_2,
-        x=monthly_combined["MonthLabel"],
-        y=monthly_combined[nombre_periodo_2],
-        marker=dict(color="#4ECDC4"),
-        text=monthly_combined[nombre_periodo_2].apply(lambda x: f"€{x:,.0f}" if x > 0 else ""),
-        textposition="outside",
-    ))
+        month_labels_full = {
+            1: "January", 2: "February", 3: "March", 4: "April",
+            5: "May", 6: "June", 7: "July", 8: "August",
+            9: "September", 10: "October", 11: "November", 12: "December"
+        }
+        monthly_combined["MonthLabel"] = monthly_combined["MonthNum"].map(month_labels_full)
 
-    fig_time.update_layout(
-        title="Month-by-Month Sales (Jan vs Jan, Feb vs Feb, ...)",
-        barmode="group",
-        height=520,
-        xaxis_title="",
-        yaxis_title="Sales (€)",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        margin=dict(t=70, r=10, b=10, l=10),
-    )
+        fig_time = go.Figure()
 
-    st.plotly_chart(fig_time, use_container_width=True)
+        fig_time.add_trace(go.Bar(
+            name=nombre_periodo_1,
+            x=monthly_combined["MonthLabel"],
+            y=monthly_combined[nombre_periodo_1],
+            marker=dict(color="#FF6B6B"),
+            text=monthly_combined[nombre_periodo_1].apply(lambda x: f"€{x:,.0f}" if x > 0 else ""),
+            textposition="outside",
+        ))
+
+        fig_time.add_trace(go.Bar(
+            name=nombre_periodo_2,
+            x=monthly_combined["MonthLabel"],
+            y=monthly_combined[nombre_periodo_2],
+            marker=dict(color="#4ECDC4"),
+            text=monthly_combined[nombre_periodo_2].apply(lambda x: f"€{x:,.0f}" if x > 0 else ""),
+            textposition="outside",
+        ))
+
+        fig_time.update_layout(
+            barmode="group",
+            height=520,
+            xaxis_title="",
+            yaxis_title="Sales (€)",
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            margin=dict(t=70, r=10, b=10, l=10),
+        )
+
+        st.plotly_chart(fig_time, use_container_width=True)
 
 
     # =========================================================================
@@ -1444,6 +1696,24 @@ if uploaded_file:
         # HTML download (NEW!)
         if st.button("🌐 GENERATE HTML", type="secondary", use_container_width=True):
             with st.spinner("🔄 Generating interactive HTML dashboard..."):
+                # Prepare additional filter lists for new columns
+                available_market_orgs = []
+                available_territories = []
+                available_countries = []
+                available_segments = []
+                
+                if 'Market Organization Name' in df.columns:
+                    available_market_orgs = sorted(df['Market Organization Name'].dropna().unique().tolist())
+                
+                if 'Sales Territory' in df.columns:
+                    available_territories = sorted(df['Sales Territory'].dropna().unique().tolist())
+                
+                if 'Country' in df.columns:
+                    available_countries = sorted(df['Country'].dropna().unique().tolist())
+                
+                if 'End User Segment' in df.columns:
+                    available_segments = sorted(df['End User Segment'].dropna().unique().tolist())
+                
                 html_content = generate_sales_comparison_html(
                     df1_filtrado=df1_filtrado,
                     df2_filtrado=df2_filtrado,
@@ -1453,7 +1723,11 @@ if uploaded_file:
                     nombre_periodo_2=nombre_periodo_2,
                     available_types=available_types,
                     available_sets=available_sets,
-                    available_reps=available_reps
+                    available_reps=available_reps,
+                    available_market_orgs=available_market_orgs,
+                    available_territories=available_territories,
+                    available_countries=available_countries,
+                    available_segments=available_segments
                 )
                 
                 nombre_archivo_html = f"comparison_{nombre_periodo_1}_vs_{nombre_periodo_2}_{fecha_actual}.html"
@@ -1528,7 +1802,7 @@ if uploaded_file:
     st.success(f"🎉 **Analysis completed!** Files ready to download")
     
     logger.info(f"Analysis completed successfully. Files: {nombre_archivo_excel}, {nombre_archivo_csv}")
-    
+
 # Footer
 st.markdown("---")
 st.markdown("""

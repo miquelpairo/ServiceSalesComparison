@@ -22,7 +22,11 @@ def generate_sales_comparison_html(
     nombre_periodo_2: str,
     available_types: List[str],
     available_sets: List[str],
-    available_reps: List[str]
+    available_reps: List[str],
+    available_market_orgs: List[str] = None,
+    available_territories: List[str] = None,
+    available_countries: List[str] = None,
+    available_segments: List[str] = None
 ) -> str:
     """
     Generate standalone HTML file with embedded data and interactive filters using Jinja2
@@ -37,6 +41,12 @@ def generate_sales_comparison_html(
         available_types: List of product types
         available_sets: List of sets
         available_reps: List of sales representatives
+
+        # Handle optional new filter lists
+        available_market_orgs = available_market_orgs or []
+        available_territories = available_territories or []
+        available_countries = available_countries or []
+        available_segments = available_segments or []
         
     Returns:
         str: Complete HTML content
@@ -181,6 +191,10 @@ def generate_sales_comparison_html(
         available_types=available_types,
         available_sets=available_sets,
         available_reps=available_reps,
+        available_market_orgs=available_market_orgs,
+        available_territories=available_territories,
+        available_countries=available_countries,
+        available_segments=available_segments,
         quick_filter_keywords=quick_filter_keywords,
         
         # Period names

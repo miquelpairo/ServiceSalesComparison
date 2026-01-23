@@ -704,183 +704,240 @@ if uploaded_file:
         st.session_state.period_months = None
     
     # =========================================================================
-    # PERIOD DEFINITION WITH QUICK BUTTONS
+    # PERIOD DEFINITION WITH QUICK PRESETS (REDESIGN + FIX P1/P2 ORDER)
     # =========================================================================
     st.markdown("---")
     st.markdown('<div class="section-header">📅 Define Periods to Compare</div>', unsafe_allow_html=True)
     st.markdown(f"**Available date range in file:** {min_date.date()} to {max_date.date()}")
-    
-    # Quick period selection
-    st.markdown("### ⚡ Quick Period Selection")
-    st.info("💡 **Tip:** Select comparison type, choose years/months, and click Apply to auto-fill dates. You can still edit manually after.")
-    
-    # Row 1: Preset type (Years or Months)
-    col_preset, col_apply = st.columns([3, 1])
-    with col_preset:
-        preset_type = st.radio(
-            "Comparison type:",
-            options=["Years", "Months"],
-            horizontal=True,
-            key="preset_type_radio",
-            help="Compare full years or specific months"
-        )
-    
-    # Row 2: Year/Month selection
-    year_1 = None
-    year_2 = None
-    month_range = None
-    
-    # Ensure we have valid years and sort them (newest first)
+
+    # -------------------------------------------------------------------------
+    # Helpers / constants
+    # -------------------------------------------------------------------------
+    month_labels_full = {
+        1: 'January', 2: 'February', 3: 'March', 4: 'April',
+        5: 'May', 6: 'June', 7: 'July', 8: 'August',
+        9: 'September', 10: 'October', 11: 'November', 12: 'December'
+    }
+
+    # Reusa tu definición de presets (ya la tenías). La dejo aquí integrada:
+    month_presets = {
+        "Full Year": None,          # especial
+        "H1 (Jan-Jun)": (1, 6),
+        "H2 (Jul-Dec)": (7, 12),
+        "Q1 (Jan-Mar)": (1, 3),
+        "Q2 (Apr-Jun)": (4, 6),
+        "Q3 (Jul-Sep)": (7, 9),
+        "Q4 (Oct-Dec)": (10, 12),
+        "Single Month": "single",
+        "Custom": "custom"
+    }
+
+    def clamp(n, min_v, max_v):
+        return max(min_v, min(n, max_v))
+
+    def get_default_year_indexes(years_sorted):
+        # Queremos: P2 = último año (más nuevo), P1 = penúltimo (si existe)
+        idx_p2 = 0
+        idx_p1 = min(1, len(years_sorted) - 1)  # si solo hay 1, será 0
+        return idx_p1, idx_p2
+
+    def apply_quick_to_session_state(preset_key, year_1, year_2, start_m=None, end_m=None):
+        # Full year
+        if preset_key == "Full Year" or month_presets.get(preset_key) is None:
+            st.session_state.start_date_1 = f"{year_1}-01-01"
+            st.session_state.end_date_1 = f"{year_1}-12-31"
+            st.session_state.start_date_2 = f"{year_2}-01-01"
+            st.session_state.end_date_2 = f"{year_2}-12-31"
+            st.session_state.nombre_p1 = str(year_1)
+            st.session_state.nombre_p2 = str(year_2)
+            return
+
+        # Month range (Q/H/single/custom)
+        if start_m is None or end_m is None:
+            st.error("⚠️ Please select a valid month range.")
+            st.stop()
+
+        st.session_state.start_date_1 = f"{year_1}-{start_m:02d}-01"
+        last_day_1 = monthrange(year_1, end_m)[1]
+        st.session_state.end_date_1 = f"{year_1}-{end_m:02d}-{last_day_1}"
+
+        st.session_state.start_date_2 = f"{year_2}-{start_m:02d}-01"
+        last_day_2 = monthrange(year_2, end_m)[1]
+        st.session_state.end_date_2 = f"{year_2}-{end_m:02d}-{last_day_2}"
+
+        # Nombres
+        if start_m == end_m:
+            label = f"{month_labels_full[start_m]}"
+        else:
+            label = f"{month_labels_full[start_m]}-{month_labels_full[end_m]}"
+
+        st.session_state.nombre_p1 = f"{label} {year_1}"
+        st.session_state.nombre_p2 = f"{label} {year_2}"
+
+
+    # -------------------------------------------------------------------------
+    # Validate years
+    # -------------------------------------------------------------------------
     if not available_years or len(available_years) == 0:
         st.error("❌ No years found in data. Please check your Date column.")
         st.stop()
-    
+
     years_sorted = sorted(available_years, reverse=True)  # Newest first
-    
-    if preset_type == "Years":
+    default_p1_idx, default_p2_idx = get_default_year_indexes(years_sorted)
+
+    # -------------------------------------------------------------------------
+    # Quick selector (solo rellena Period Details de abajo)
+    # -------------------------------------------------------------------------
+    st.markdown("### ⚡ Quick Period Selection")
+    st.info("💡 **Tip:** Choose a preset + years and click Apply to auto-fill the editable Period Details below.")
+
+    col_preset, col_apply = st.columns([3, 1])
+
+    with col_preset:
+        preset_key = st.selectbox(
+            "Quick preset:",
+            options=list(month_presets.keys()),
+            index=0,
+            key="quick_preset_select_new",
+            help="This will autofill the Period Details below"
+        )
+
+    # Inicializa inputs para el apply
+    year_1 = None
+    year_2 = None
+    month_range = None  # (start_m, end_m)
+
+    preset_value = month_presets[preset_key]
+
+    # Caso 1: Full Year o Q/H (rango fijo)
+    if preset_value is None or isinstance(preset_value, tuple):
         col_y1, col_y2 = st.columns(2)
         with col_y1:
             year_1 = st.selectbox(
                 "Period 1 Year:",
                 options=years_sorted,
-                index=0,
-                
-                key="quick_year_1"
+                index=default_p1_idx,  # ✅ P1 = penúltimo (si existe)
+                key="quick_year_1_new"
             )
         with col_y2:
             year_2 = st.selectbox(
                 "Period 2 Year:",
                 options=years_sorted,
-                index=min(1, len(years_sorted) - 1),
-                key="quick_year_2"
+                index=default_p2_idx,  # ✅ P2 = último
+                key="quick_year_2_new"
             )
-    else:  # Months
-        col_months, col_y1, col_y2 = st.columns([2, 1, 1])
-        with col_months:
-            month_labels_full = {
-                1: 'January', 2: 'February', 3: 'March', 4: 'April',
-                5: 'May', 6: 'June', 7: 'July', 8: 'August',
-                9: 'September', 10: 'October', 11: 'November', 12: 'December'
-            }
-            
-            # Predefined month ranges
-            month_presets = {
-                "Q1 (Jan-Mar)": (1, 3),
-                "Q2 (Apr-Jun)": (4, 6),
-                "Q3 (Jul-Sep)": (7, 9),
-                "Q4 (Oct-Dec)": (10, 12),
-                "H1 (Jan-Jun)": (1, 6),
-                "H2 (Jul-Dec)": (7, 12),
-                "Custom": None
-            }
-            
-            selected_preset = st.selectbox(
-                "Month range:",
-                options=list(month_presets.keys()),
-                key="month_preset_select"
+
+        if isinstance(preset_value, tuple):
+            month_range = preset_value
+
+    # Caso 2: Single Month
+    elif preset_value == "single":
+        col_m, col_y1, col_y2 = st.columns([2, 1, 1])
+        with col_m:
+            month = st.selectbox(
+                "Month:",
+                options=list(range(1, 13)),
+                format_func=lambda x: month_labels_full[x],
+                key="quick_single_month_new"
             )
-            
-            if selected_preset == "Custom":
-                col_m1, col_m2 = st.columns(2)
-                with col_m1:
-                    start_month = st.selectbox(
-                        "From month:",
-                        options=list(range(1, 13)),
-                        format_func=lambda x: month_labels_full[x],
-                        key="custom_start_month"
-                    )
-                with col_m2:
-                    end_month = st.selectbox(
-                        "To month:",
-                        options=list(range(1, 13)),
-                        index=2,  # Default to March
-                        format_func=lambda x: month_labels_full[x],
-                        key="custom_end_month"
-                    )
-                month_range = (start_month, end_month)
-            else:
-                month_range = month_presets[selected_preset]
-        
+            month_range = (month, month)
+
         with col_y1:
             year_1 = st.selectbox(
                 "Period 1 Year:",
                 options=years_sorted,
-                index=min(1, len(years_sorted) - 1), 
-                key="quick_month_year_1"
+                index=default_p1_idx,
+                key="quick_single_year_1_new"
             )
         with col_y2:
             year_2 = st.selectbox(
                 "Period 2 Year:",
                 options=years_sorted,
-                index=0, 
-                key="quick_month_year_2"
+                index=default_p2_idx,
+                key="quick_single_year_2_new"
             )
-    
-    # Apply button
+
+    # Caso 3: Custom Month Range
+    elif preset_value == "custom":
+        col_m1, col_m2, col_y1, col_y2 = st.columns([1, 1, 1, 1])
+        with col_m1:
+            start_m = st.selectbox(
+                "From month:",
+                options=list(range(1, 13)),
+                format_func=lambda x: month_labels_full[x],
+                key="quick_custom_start_month_new"
+            )
+        with col_m2:
+            end_m = st.selectbox(
+                "To month:",
+                options=list(range(1, 13)),
+                index=clamp(start_m - 1, 0, 11),
+                format_func=lambda x: month_labels_full[x],
+                key="quick_custom_end_month_new"
+            )
+        month_range = (start_m, end_m)
+
+        with col_y1:
+            year_1 = st.selectbox(
+                "Period 1 Year:",
+                options=years_sorted,
+                index=default_p1_idx,
+                key="quick_custom_year_1_new"
+            )
+        with col_y2:
+            year_2 = st.selectbox(
+                "Period 2 Year:",
+                options=years_sorted,
+                index=default_p2_idx,
+                key="quick_custom_year_2_new"
+            )
+
+    # Apply + Swap
     with col_apply:
-        st.markdown("<br>", unsafe_allow_html=True)  # Spacing
-        if st.button("🚀 Apply", type="primary", use_container_width=True, key="apply_preset"):
-            # Validate that we have all required values
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        if st.button("🚀 Apply", type="primary", use_container_width=True, key="apply_preset_new"):
             if year_1 is None or year_2 is None:
-                st.error("⚠️ Please select years for both periods")
+                st.error("⚠️ Please select years for both periods.")
                 st.stop()
-            
-            if preset_type == "Years":
-                # Full year comparison
-                st.session_state.start_date_1 = f"{year_1}-01-01"
-                st.session_state.end_date_1 = f"{year_1}-12-31"
-                st.session_state.start_date_2 = f"{year_2}-01-01"
-                st.session_state.end_date_2 = f"{year_2}-12-31"
-                st.session_state.nombre_p1 = str(year_1)
-                st.session_state.nombre_p2 = str(year_2)
+
+            if month_range is None:
+                # Full year
+                apply_quick_to_session_state(preset_key, year_1, year_2)
             else:
-                # Month range comparison
-                if month_range is None:
-                    st.error("⚠️ Please select a month range first")
-                    st.stop()
-                
-                start_m, end_m = month_range
-                st.session_state.start_date_1 = f"{year_1}-{start_m:02d}-01"
-                # Calculate last day of end month
-                last_day_1 = monthrange(year_1, end_m)[1]
-                st.session_state.end_date_1 = f"{year_1}-{end_m:02d}-{last_day_1}"
-                
-                st.session_state.start_date_2 = f"{year_2}-{start_m:02d}-01"
-                last_day_2 = monthrange(year_2, end_m)[1]
-                st.session_state.end_date_2 = f"{year_2}-{end_m:02d}-{last_day_2}"
-                
-                # Define month_labels_full for name generation
-                month_labels_full = {
-                    1: 'January', 2: 'February', 3: 'March', 4: 'April',
-                    5: 'May', 6: 'June', 7: 'July', 8: 'August',
-                    9: 'September', 10: 'October', 11: 'November', 12: 'December'
-                }
-                
-                st.session_state.nombre_p1 = f"{month_labels_full[start_m]}-{month_labels_full[end_m]} {year_1}"
-                st.session_state.nombre_p2 = f"{month_labels_full[start_m]}-{month_labels_full[end_m]} {year_2}"
-            
+                sm, em = month_range
+                apply_quick_to_session_state(preset_key, year_1, year_2, start_m=sm, end_m=em)
+
             st.success("✅ Dates applied! You can edit them manually below if needed.")
             st.rerun()
-    
+
+        if st.button("🔁 Swap P1 ↔ P2", use_container_width=True, key="swap_periods_new"):
+            # Intercambia los period details ya aplicados (si existen)
+            for a, b in [("start_date_1", "start_date_2"), ("end_date_1", "end_date_2"), ("nombre_p1", "nombre_p2")]:
+                st.session_state[a], st.session_state[b] = st.session_state.get(b), st.session_state.get(a)
+            st.rerun()
+
+
+    # -------------------------------------------------------------------------
+    # Period Details (editable) - tu bloque original casi intacto
+    # -------------------------------------------------------------------------
     st.markdown("---")
     st.markdown("### 📝 Period Details (editable)")
-    
+
     col1, col2 = st.columns(2)
-    
+
     # ==================== PERIOD 1 ====================
     with col1:
         st.markdown("#### 📅 Period 1")
-        
-        # Auto-fill name or use session state
+
         default_name_1 = st.session_state.get('nombre_p1', str(max_date.year - 1))
         nombre_periodo_1 = st.text_input(
-            "Period 1 Name", 
-            value=default_name_1, 
+            "Period 1 Name",
+            value=default_name_1,
             key="nombre_p1_input",
             help="Edit to customize the period name"
         )
-        
-        # Date inputs
+
         col_start, col_end = st.columns(2)
         with col_start:
             default_start_1 = st.session_state.get('start_date_1', f"{max_date.year - 1}-01-01")
@@ -893,7 +950,7 @@ if uploaded_file:
             if start_date_1 is None:
                 st.error("Invalid date format. Use YYYY-MM-DD")
                 st.stop()
-        
+
         with col_end:
             default_end_1 = st.session_state.get('end_date_1', f"{max_date.year - 1}-12-31")
             end_str_1 = st.text_input(
@@ -905,23 +962,21 @@ if uploaded_file:
             if end_date_1 is None:
                 st.error("Invalid date format. Use YYYY-MM-DD")
                 st.stop()
-        
+
         st.caption(f"📊 Selected: {start_date_1} to {end_date_1}")
-    
+
     # ==================== PERIOD 2 ====================
     with col2:
         st.markdown("#### 📅 Period 2")
-        
-        # Auto-fill name or use session state
+
         default_name_2 = st.session_state.get('nombre_p2', str(max_date.year))
         nombre_periodo_2 = st.text_input(
-            "Period 2 Name", 
-            value=default_name_2, 
+            "Period 2 Name",
+            value=default_name_2,
             key="nombre_p2_input",
             help="Edit to customize the period name"
         )
-        
-        # Date inputs
+
         col_start, col_end = st.columns(2)
         with col_start:
             default_start_2 = st.session_state.get('start_date_2', f"{max_date.year}-01-01")
@@ -934,7 +989,7 @@ if uploaded_file:
             if start_date_2 is None:
                 st.error("Invalid date format. Use YYYY-MM-DD")
                 st.stop()
-        
+
         with col_end:
             default_end_2 = st.session_state.get('end_date_2', f"{max_date.year}-12-31")
             end_str_2 = st.text_input(
@@ -946,30 +1001,30 @@ if uploaded_file:
             if end_date_2 is None:
                 st.error("Invalid date format. Use YYYY-MM-DD")
                 st.stop()
-        
+
         st.caption(f"📊 Selected: {start_date_2} to {end_date_2}")
-    
+
     # Validate date ranges
     if start_date_1 > end_date_1:
-        st.error(f"❌ Period 1: Start date must be before end date")
+        st.error("❌ Period 1: Start date must be before end date")
         st.stop()
-    
+
     if start_date_2 > end_date_2:
-        st.error(f"❌ Period 2: Start date must be before end date")
+        st.error("❌ Period 2: Start date must be before end date")
         st.stop()
-    
+
     # Filter data by periods
     with st.spinner("🔄 Filtering data by periods..."):
-        df1 = df[(pd.to_datetime(df[col_fecha]) >= pd.to_datetime(start_date_1)) & 
-                 (pd.to_datetime(df[col_fecha]) <= pd.to_datetime(end_date_1))].copy()
-        
-        df2 = df[(pd.to_datetime(df[col_fecha]) >= pd.to_datetime(start_date_2)) & 
-                 (pd.to_datetime(df[col_fecha]) <= pd.to_datetime(end_date_2))].copy()
-    
+        df1 = df[(pd.to_datetime(df[col_fecha]) >= pd.to_datetime(start_date_1)) &
+                (pd.to_datetime(df[col_fecha]) <= pd.to_datetime(end_date_1))].copy()
+
+        df2 = df[(pd.to_datetime(df[col_fecha]) >= pd.to_datetime(start_date_2)) &
+                (pd.to_datetime(df[col_fecha]) <= pd.to_datetime(end_date_2))].copy()
+
     logger.info(f"Period 1: {len(df1)} records, Period 2: {len(df2)} records")
-    
+
     st.success(f"✅ **Periods defined:** {len(df1):,} records in {nombre_periodo_1}, {len(df2):,} records in {nombre_periodo_2}")
-    
+
     # Warning if periods overlap
     if not (end_date_1 < start_date_2 or end_date_2 < start_date_1):
         st.warning("⚠️ **Warning:** The selected periods overlap. This may affect the comparison results.")
@@ -1436,6 +1491,123 @@ if uploaded_file:
         )
 
         st.plotly_chart(fig_time, use_container_width=True)
+
+    # =========================================================================
+    # BY CUSTOMER (P1 vs P2)  ✅ updates with filters + robust numeric sorting
+    # =========================================================================
+    st.markdown("---")
+    st.markdown('<div class="section-header">👥 By Customer</div>', unsafe_allow_html=True)
+
+    customer_col = col_cliente          # "Business Partner Name"
+    eur_col = col_precio                # "EUR" (ya estandarizado)
+
+    # Fuente CORRECTA: los dataframes filtrados
+    df1_src = df1_filtrado.copy()
+    df2_src = df2_filtrado.copy()
+
+    # Validación defensiva
+    if customer_col not in df1_src.columns or customer_col not in df2_src.columns:
+        st.error(f"❌ No encuentro la columna de cliente '{customer_col}' en df1_filtrado/df2_filtrado.")
+        st.stop()
+
+    if eur_col not in df1_src.columns or eur_col not in df2_src.columns:
+        st.error(f"❌ No encuentro la columna de facturación '{eur_col}' en df1_filtrado/df2_filtrado.")
+        st.stop()
+
+    def to_float_money(s: pd.Series) -> pd.Series:
+        """
+        Convierte valores tipo:
+        - '1.234,56' (EU)
+        - '1,234.56' (US)
+        - '1234,56'
+        - '1234.56'
+        - '€1.234,56'
+        a float.
+        """
+        x = s.astype(str).str.strip()
+
+        # Limpieza básica
+        x = (x.str.replace("€", "", regex=False)
+            .str.replace("\u00A0", "", regex=False)  # non-breaking space
+            .str.replace(" ", "", regex=False))
+
+        has_comma = x.str.contains(",", regex=False)
+        has_dot = x.str.contains(r"\.", regex=True)
+
+        both = has_comma & has_dot
+        only_comma = has_comma & ~has_dot
+
+        # Ambos separadores: decide decimal por el separador más a la derecha
+        xb = x[both]
+        dec_is_comma = xb.str.rfind(",") > xb.str.rfind(".")
+        # decimal coma: quita miles '.' y convierte ',' -> '.'
+        xb1 = xb[dec_is_comma].str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
+        # decimal punto: quita miles ','
+        xb2 = xb[~dec_is_comma].str.replace(",", "", regex=False)
+
+        x.loc[xb1.index] = xb1
+        x.loc[xb2.index] = xb2
+
+        # Solo coma: asumimos coma decimal
+        x.loc[only_comma] = (x.loc[only_comma]
+                            .str.replace(".", "", regex=False)
+                            .str.replace(",", ".", regex=False))
+
+        return pd.to_numeric(x, errors="coerce").fillna(0.0)
+
+    # Normaliza cliente + EUR a numérico real
+    df1_src[customer_col] = df1_src[customer_col].fillna("(Unknown)").astype(str)
+    df2_src[customer_col] = df2_src[customer_col].fillna("(Unknown)").astype(str)
+
+    df1_src[eur_col] = to_float_money(df1_src[eur_col])
+    df2_src[eur_col] = to_float_money(df2_src[eur_col])
+
+    # Agregados
+    p1_by_customer = df1_src.groupby(customer_col, dropna=False)[eur_col].sum().rename(nombre_periodo_1)
+    p2_by_customer = df2_src.groupby(customer_col, dropna=False)[eur_col].sum().rename(nombre_periodo_2)
+
+    by_customer = (
+        pd.concat([p1_by_customer, p2_by_customer], axis=1)
+        .fillna(0.0)
+        .reset_index()
+        .rename(columns={customer_col: "Customer"})
+    )
+
+    # Deltas (siempre numéricos)
+    by_customer["Diff (P2-P1)"] = by_customer[nombre_periodo_2] - by_customer[nombre_periodo_1]
+    by_customer["Growth %"] = by_customer.apply(
+        lambda r: (r["Diff (P2-P1)"] / r[nombre_periodo_1] * 100)
+                if r[nombre_periodo_1] != 0
+                else (100.0 if r[nombre_periodo_2] > 0 else 0.0),
+        axis=1
+    )
+
+    # Orden inicial por P2 desc (numérico real)
+    by_customer = by_customer.sort_values(nombre_periodo_2, ascending=False).reset_index(drop=True)
+
+    # Tabla (mantén números; el formateo lo hace column_config)
+    st.dataframe(
+        by_customer,
+        use_container_width=True,
+        height=520,
+        column_config={
+            nombre_periodo_1: st.column_config.NumberColumn(nombre_periodo_1, format="€%.2f"),
+            nombre_periodo_2: st.column_config.NumberColumn(nombre_periodo_2, format="€%.2f"),
+            "Diff (P2-P1)": st.column_config.NumberColumn("Diff (P2-P1)", format="€%.2f"),
+            "Growth %": st.column_config.NumberColumn("Growth %", format="%.1f%%"),
+        }
+    )
+
+    # Descarga CSV
+    csv_bytes = by_customer.to_csv(index=False).encode("utf-8")
+    st.download_button(
+        "⬇️ Download (CSV)",
+        data=csv_bytes,
+        file_name=f"by_customer_{nombre_periodo_1}_vs_{nombre_periodo_2}.csv",
+        mime="text/csv",
+        use_container_width=True
+    )
+
 
 
     # =========================================================================

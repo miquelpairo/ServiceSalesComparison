@@ -150,8 +150,12 @@
                     
                     <div class="quick-mode-toggle">
                         <label>
-                            <input type="checkbox" id="quickModeOr" onchange="setQuickMode(this.checked ? 'OR' : 'AND')">
-                            Quick filters en modo OR (si no, AND)
+                            <input type="radio" name="quickMode" value="AND" checked onchange="setQuickMode('AND')">
+                            AND
+                        </label>
+                        <label>
+                            <input type="radio" name="quickMode" value="OR" onchange="setQuickMode('OR')">
+                            OR
                         </label>
                     </div>
                 </details>

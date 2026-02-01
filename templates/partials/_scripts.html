@@ -294,7 +294,8 @@
             if (el('customerInput')) el('customerInput').value = '';
             
             quickMode = 'AND';
-            if (el('quickModeOr')) el('quickModeOr').checked = false;
+            const radioAnd = document.querySelector('input[name="quickMode"][value="AND"]');
+            if (radioAnd) radioAnd.checked = true;
             
             applyFilters();
         }

@@ -125,7 +125,7 @@ def generate_sales_comparison_html(
     # QUICK FILTER KEYWORDS
     # =========================================================================
     
-    quick_filter_keywords = ['CARE', 'Exact', 'Start', 'Circle', 'Maintain', 'IQ/OQ', 'OQ', 'Install', 'Academy']
+    quick_filter_keywords = ['CARE', 'Exact', 'Start', 'Circle', 'Maintain', 'IQ', 'OQ', 'Install', 'Academy', 'Plus']
     
     # =========================================================================
     # LOAD BUCHI STYLES

@@ -557,4 +557,108 @@
         .quick-mode-toggle input[type="radio"] {
             margin: 0;
         }
+        /* ========================================
+        SFDC LINK STYLES
+        ======================================== */
+
+        /* Estilo base para enlaces de Salesforce */
+        .sfdc-link {
+            color: #0070d2;
+            text-decoration: none;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        /* Hover effect */
+        .sfdc-link:hover {
+            color: #005fb2;
+            text-decoration: underline;
+        }
+
+        /* Icono de enlace externo */
+        .sfdc-link::after {
+            content: "🔗";
+            font-size: 0.8em;
+            opacity: 0.6;
+            transition: opacity 0.2s ease;
+        }
+
+        .sfdc-link:hover::after {
+            opacity: 1;
+        }
+
+        /* Alternativa con icono SVG (más profesional) */
+        .sfdc-link.with-icon::after {
+            content: "";
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            margin-left: 4px;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%230070d2'%3E%3Cpath d='M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z'/%3E%3C/svg%3E");
+            background-size: contain;
+            background-repeat: no-repeat;
+            opacity: 0.7;
+        }
+
+        .sfdc-link.with-icon:hover::after {
+            opacity: 1;
+        }
+
+        /* Estilo para modo oscuro (opcional) */
+        @media (prefers-color-scheme: dark) {
+            .sfdc-link {
+                color: #4fc3f7;
+            }
+            
+            .sfdc-link:hover {
+                color: #81d4fa;
+            }
+        }
+
+        /* Evitar que el enlace rompa el layout en tablas */
+        td .sfdc-link {
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* Estilo cuando está dentro de celdas de tabla */
+        table td .sfdc-link {
+            display: inline;
+        }
+
+        /* Ajuste para tablas con sorting */
+        th:hover .sfdc-link {
+            color: #0070d2;
+        }
+
+        /* Focus state para accesibilidad */
+        .sfdc-link:focus {
+            outline: 2px solid #0070d2;
+            outline-offset: 2px;
+            border-radius: 2px;
+        }
+
+        /* Variante con badge de Salesforce (opcional) */
+        .sfdc-link.with-badge::before {
+            content: "SF";
+            display: inline-block;
+            background-color: #0070d2;
+            color: white;
+            font-size: 10px;
+            font-weight: bold;
+            padding: 2px 4px;
+            border-radius: 3px;
+            margin-right: 6px;
+            vertical-align: middle;
+        }
+
+        .sfdc-link.with-badge:hover::before {
+            background-color: #005fb2;
+        }
+
 </style>

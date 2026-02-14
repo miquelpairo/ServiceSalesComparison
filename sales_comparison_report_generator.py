@@ -26,7 +26,8 @@ def generate_sales_comparison_html(
     available_market_orgs: List[str] = None,
     available_territories: List[str] = None,
     available_countries: List[str] = None,
-    available_segments: List[str] = None
+    available_segments: List[str] = None,
+    has_sfdc_links: bool = False  # ✅ NUEVO PARÁMETRO
 ) -> str:
     """
     Generate standalone HTML file with embedded data and interactive filters using Jinja2
@@ -216,7 +217,10 @@ def generate_sales_comparison_html(
         # Timestamps
         timestamp=timestamp,
         timestamp_short=timestamp_short,
-        year=year
+        year=year,
+        
+        # ✅ SFDC Links flag
+        has_sfdc_links=has_sfdc_links
     )
     
     return html_content

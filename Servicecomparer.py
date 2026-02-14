@@ -341,6 +341,21 @@ if uploaded_file:
     available_reps = sorted(df['SalesRepresentative'].dropna().unique().tolist())
     available_types = sorted(df['ProductType'].dropna().unique().tolist())
     available_sets = sorted(df['Set'].dropna().unique().tolist())
+    
+    # Rellenar End User Segment y Market Organization vacíos
+    if 'End User Segment' in df.columns:
+        df['End User Segment'] = df['End User Segment'].fillna('Unknown')
+
+    if 'Market Organization Name' in df.columns:
+        df['Market Organization Name'] = df['Market Organization Name'].fillna('Unknown')
+
+    if 'Sales Territory' in df.columns:
+        df['Sales Territory'] = df['Sales Territory'].fillna('Unknown')
+
+    if 'Country' in df.columns:
+        df['Country'] = df['Country'].fillna('Unknown')
+    
+    
     month_options = list(range(1, 13))
     month_labels = {
         1: 'January', 2: 'February', 3: 'March', 4: 'April',
@@ -1707,12 +1722,11 @@ if uploaded_file:
 
 
     # =========================================================================
-# =========================================================================
-    # STEP 6: DOWNLOAD
+    # STEP 6: DOWNLOAD HTML DASHBOARD
     # =========================================================================
     st.markdown("---")
-    st.markdown('<div class="section-header">📥 Download Results</div>', unsafe_allow_html=True)
-    
+    st.markdown('<div class="section-header">📥 Download Interactive Dashboard</div>', unsafe_allow_html=True)
+
     # Prepare configuration for reproducibility
     config_info = {
         'Source File': uploaded_file.name,
@@ -1733,193 +1747,73 @@ if uploaded_file:
         'Difference': f"€{diferencia_total:,.2f}",
         'Growth %': f"{porcentaje_cambio:.1f}%"
     }
-    
+
     # =========================================================================
-    # EXCEL DOWNLOAD
+    # HTML DASHBOARD DOWNLOAD
     # =========================================================================
-    st.markdown("### 📊 Excel Report (Complete Analysis)")
-    
-    st.info("🔧 Generating Excel file with all analysis sheets...")
-    
-    # Prepare download file
-    with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
-        tmp_path = tmp_file.name
-    
-    # Create Excel with progress
-    with st.spinner("📊 Creating Excel workbook..."):
-        progress_bar = st.progress(0)
-        
-        with pd.ExcelWriter(tmp_path, engine='openpyxl') as writer:
-            # Configuration sheet
-            progress_bar.progress(10)
-            pd.DataFrame([config_info]).T.reset_index().rename(columns={'index': 'Parameter', 0: 'Value'}).to_excel(
-                writer, index=False, sheet_name='Configuration'
+    st.markdown("### 🌐 Interactive HTML Dashboard")
+
+    st.info("💡 **Generate a self-contained HTML file** with all data, filters, charts, and interactive tables. Perfect for sharing with colleagues or presenting in meetings.")
+
+    if st.button("🚀 GENERATE HTML DASHBOARD", type="primary", use_container_width=True):
+        with st.spinner("🔄 Generating interactive HTML dashboard..."):
+            # Prepare additional filter lists for new columns
+            available_market_orgs = []
+            available_territories = []
+            available_countries = []
+            available_segments = []
+            
+            if 'Market Organization Name' in df.columns:
+                available_market_orgs = sorted(df['Market Organization Name'].dropna().unique().tolist())
+            
+            if 'Sales Territory' in df.columns:
+                available_territories = sorted(df['Sales Territory'].dropna().unique().tolist())
+            
+            if 'Country' in df.columns:
+                available_countries = sorted(df['Country'].dropna().unique().tolist())
+            
+            if 'End User Segment' in df.columns:
+                available_segments = sorted(df['End User Segment'].dropna().unique().tolist())
+            
+            # ✅ Check if SFDC Link column exists in filtered data
+            has_sfdc_links = 'SFDC Link' in df1_filtrado.columns and df1_filtrado['SFDC Link'].notna().sum() > 0
+
+            html_content = generate_sales_comparison_html(
+                df1_filtrado=df1_filtrado,
+                df2_filtrado=df2_filtrado,
+                comparativa=comparativa,
+                config_info=config_info,
+                nombre_periodo_1=nombre_periodo_1,
+                nombre_periodo_2=nombre_periodo_2,
+                available_types=available_types,
+                available_sets=available_sets,
+                available_reps=available_reps,
+                available_market_orgs=available_market_orgs,
+                available_territories=available_territories,
+                available_countries=available_countries,
+                available_segments=available_segments,
+                has_sfdc_links=has_sfdc_links  # ✅ NUEVO PARÁMETRO
             )
             
-            # Main comparison sheet
-            progress_bar.progress(20)
-            comparativa_out = comparativa.reset_index()
-            comparativa_out.to_excel(writer, index=False, sheet_name='Comparison')
+            fecha_actual = datetime.now().strftime("%Y%m%d")
+            nombre_archivo_html = f"comparison_{nombre_periodo_1}_vs_{nombre_periodo_2}_{fecha_actual}.html"
             
-            # Complete original data
-            progress_bar.progress(40)
-            df1_filtrado_copy = df1_filtrado.copy()
-            df1_filtrado_copy['Source'] = nombre_periodo_1
-            df2_filtrado_copy = df2_filtrado.copy()
-            df2_filtrado_copy['Source'] = nombre_periodo_2
+            st.download_button(
+                label="📥 DOWNLOAD HTML DASHBOARD",
+                data=html_content,
+                file_name=nombre_archivo_html,
+                mime="text/html",
+                use_container_width=True,
+                key="download_html"
+            )
             
-            datos_originales = pd.concat([df1_filtrado_copy, df2_filtrado_copy], ignore_index=True)
-            datos_originales.to_excel(writer, index=False, sheet_name='Original Data')
-            
-            # Unique services in each period and common ones
-            progress_bar.progress(60)
-            keys_1 = set(df1_filtrado[[col_cliente, col_producto, col_sales_rep, col_set, col_productline, col_tipo]].apply(tuple, axis=1))
-            keys_2 = set(df2_filtrado[[col_cliente, col_producto, col_sales_rep, col_set, col_productline, col_tipo]].apply(tuple, axis=1))
-            
-            unicos_1 = keys_1 - keys_2
-            unicos_2 = keys_2 - keys_1
-            comunes = keys_1 & keys_2
-            
-            # DataFrames of unique and common
-            progress_bar.progress(70)
-            if unicos_1:
-                df_unicos_1 = df1_filtrado[df1_filtrado[[col_cliente, col_producto, col_sales_rep, col_set, col_productline, col_tipo]].apply(tuple, axis=1).isin(unicos_1)]
-                df_unicos_1.to_excel(writer, index=False, sheet_name=f'Only in {nombre_periodo_1}'[:31])
-            
-            progress_bar.progress(80)
-            if unicos_2:
-                df_unicos_2 = df2_filtrado[df2_filtrado[[col_cliente, col_producto, col_sales_rep, col_set, col_productline, col_tipo]].apply(tuple, axis=1).isin(unicos_2)]
-                df_unicos_2.to_excel(writer, index=False, sheet_name=f'Only in {nombre_periodo_2}'[:31])
-            
-            progress_bar.progress(90)
-            if comunes:
-                df_comunes_1 = df1_filtrado[df1_filtrado[[col_cliente, col_producto, col_sales_rep, col_set, col_productline, col_tipo]].apply(tuple, axis=1).isin(comunes)].copy()
-                df_comunes_2 = df2_filtrado[df2_filtrado[[col_cliente, col_producto, col_sales_rep, col_set, col_productline, col_tipo]].apply(tuple, axis=1).isin(comunes)].copy()
-                
-                df_comunes_1['Period'] = nombre_periodo_1
-                df_comunes_2['Period'] = nombre_periodo_2
-                
-                df_comunes_combinado = pd.concat([df_comunes_1, df_comunes_2], ignore_index=True)
-                df_comunes_combinado.to_excel(writer, index=False, sheet_name='Common in both')
-            
-            progress_bar.progress(100)
-    
-    logger.info("Excel file created successfully")
-    
-    # Read final file
-    with open(tmp_path, 'rb') as f:
-        output_excel = BytesIO(f.read())
-    
-    # Clean up
-    os.unlink(tmp_path)
-    
-    # Filename with date
-    fecha_actual = datetime.now().strftime("%Y%m%d")
-    nombre_archivo_excel = f"comparison_{nombre_periodo_1}_vs_{nombre_periodo_2}_{fecha_actual}.xlsx"
-    
-    st.success("✅ **Excel file generated successfully**")
-    
-    # Information about content
-    with st.expander("📋 What does the Excel file contain?", expanded=False):
-        st.markdown(f"""
-        The file contains **6 sheets** with different analyses:
-        
-        1. **⚙️ Configuration** - Analysis parameters for reproducibility
-        2. **📊 Comparison** - Complete table with all customer-product combinations and their differences
-        3. **📄 Original Data** - All original transactions from both periods (with 'Source' column)
-        4. **🔴 Only in {nombre_periodo_1}** - {registros_solo_p1:,} records that do NOT appear in {nombre_periodo_2} (lost customers)
-        5. **🟢 Only in {nombre_periodo_2}** - {registros_solo_p2:,} new records (gained customers)
-        6. **✅ Common in both** - {registros_comunes:,} records appearing in both periods (loyal customers)
-        
-        ### 💡 Recommended uses:
-        - **Sheet 1 (Configuration):** Review analysis parameters and reproduce results
-        - **Sheet 4 (Only in P1):** Identify customers to recover or non-renewed services
-        - **Sheet 5 (Only in P2):** Celebrate new acquisitions and expansion
-        - **Sheet 6 (Common):** Analyze growth in the loyal base
-        """)
-    
-    # Download buttons
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        # Excel download
-        st.download_button(
-            label="📥 DOWNLOAD EXCEL FILE",
-            data=output_excel.getvalue(),
-            file_name=nombre_archivo_excel,
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True
-        )
-    
-    with col2:
-        # CSV download (comparison only)
-        nombre_archivo_csv = f"comparison_{nombre_periodo_1}_vs_{nombre_periodo_2}_{fecha_actual}.csv"
-        csv_output = comparativa.reset_index().to_csv(index=False).encode('utf-8')
-        
-        st.download_button(
-            label="📥 DOWNLOAD CSV",
-            data=csv_output,
-            file_name=nombre_archivo_csv,
-            mime="text/csv",
-            use_container_width=True
-        )
-    
-    with col3:
-        # HTML download (NEW!)
-        if st.button("🌐 GENERATE HTML", type="secondary", use_container_width=True):
-            with st.spinner("🔄 Generating interactive HTML dashboard..."):
-                # Prepare additional filter lists for new columns
-                available_market_orgs = []
-                available_territories = []
-                available_countries = []
-                available_segments = []
-                
-                if 'Market Organization Name' in df.columns:
-                    available_market_orgs = sorted(df['Market Organization Name'].dropna().unique().tolist())
-                
-                if 'Sales Territory' in df.columns:
-                    available_territories = sorted(df['Sales Territory'].dropna().unique().tolist())
-                
-                if 'Country' in df.columns:
-                    available_countries = sorted(df['Country'].dropna().unique().tolist())
-                
-                if 'End User Segment' in df.columns:
-                    available_segments = sorted(df['End User Segment'].dropna().unique().tolist())
-                
-                html_content = generate_sales_comparison_html(
-                    df1_filtrado=df1_filtrado,
-                    df2_filtrado=df2_filtrado,
-                    comparativa=comparativa,
-                    config_info=config_info,
-                    nombre_periodo_1=nombre_periodo_1,
-                    nombre_periodo_2=nombre_periodo_2,
-                    available_types=available_types,
-                    available_sets=available_sets,
-                    available_reps=available_reps,
-                    available_market_orgs=available_market_orgs,
-                    available_territories=available_territories,
-                    available_countries=available_countries,
-                    available_segments=available_segments
-                )
-                
-                nombre_archivo_html = f"comparison_{nombre_periodo_1}_vs_{nombre_periodo_2}_{fecha_actual}.html"
-                
-                st.download_button(
-                    label="📥 DOWNLOAD HTML DASHBOARD",
-                    data=html_content,
-                    file_name=nombre_archivo_html,
-                    mime="text/html",
-                    use_container_width=True,
-                    key="download_html"
-                )
-                
-                st.success("✅ **HTML dashboard generated successfully!**")
-    
+            st.success("✅ **HTML dashboard generated successfully!**")
+
     # =========================================================================
     # HTML INFO BOX
     # =========================================================================
     st.markdown("---")
-    
+
     with st.expander("ℹ️ About the HTML Dashboard", expanded=False):
         st.markdown("""
         ### 🌐 Interactive HTML Dashboard Features:
@@ -1928,11 +1822,18 @@ if uploaded_file:
         - Single HTML file with all data embedded
         - No internet connection required after download
         - Share with colleagues who don't have Python/Streamlit
+        - Works on any device with a web browser
+        
+        **🔗 SFDC Integration:**
+        - Customer names are clickable links to Salesforce (when available)
+        - Direct access to account details with one click
+        - Opens in new tab for seamless workflow
         
         **🎛️ Interactive Filters:**
         - Product Type, Set, Sales Representative filters
         - Quick filter tags (CARE, Exact, Start, etc.) with AND/OR mode
         - Customer search
+        - Market Organization, Territory, Country, Segment filters
         - All/None buttons for each filter group
         - Active filters display with chips
         
@@ -1945,6 +1846,7 @@ if uploaded_file:
         
         **📋 Multiple Data Views (Tabs):**
         - **Full Comparison:** Complete comparison table with differences
+        - **By Customer:** Aggregated customer-level analysis
         - **Only in P1:** Records that didn't repeat (lost customers)
         - **Only in P2:** New records (gained customers)
         - **Common Records:** Recurring sales (loyal customers)
@@ -1952,12 +1854,15 @@ if uploaded_file:
         **📊 Real-time Metrics:**
         - Total sales for each period
         - Growth percentage
+        - Customer counts (retained, lost, new)
         - Record counts (common, only P1, only P2)
         - Retention and acquisition rates
+        - Expansion and contraction analysis
         
         **🔍 Sortable Tables:**
         - Click column headers to sort
         - Visual sort indicators (↑↓)
+        - CSV export buttons for each table
         
         **💾 State Persistence:**
         - Filter selections remembered during session
@@ -1969,11 +1874,12 @@ if uploaded_file:
         - 💼 Present in meetings without internet
         - 🔄 Archive for future reference
         - 👥 Share with non-technical stakeholders
+        - 🔗 Quick access to Salesforce records
         """)
-    
-    st.success(f"🎉 **Analysis completed!** Files ready to download")
-    
-    logger.info(f"Analysis completed successfully. Files: {nombre_archivo_excel}, {nombre_archivo_csv}")
+
+    st.success(f"🎉 **Analysis completed!** Generate the HTML dashboard above to share your results.")
+
+    logger.info(f"Analysis completed successfully.")
 
 # Footer
 st.markdown("---")

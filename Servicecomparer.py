@@ -171,9 +171,42 @@ def load_file(file):
             
             # Rename columns to standardized names
             df = df.rename(columns=reverse_mapping)
-            
+
             logger.info("Column mapping applied successfully")
             logger.info(f"Standardized columns: {df.columns.tolist()}")
+
+            # ✅ NUEVO: Rellenar Business Partner Name vacíos usando Id - Name como fallback
+            if 'Business Partner Name' in df.columns:
+                empty_mask = df['Business Partner Name'].isna()
+                empty_count = empty_mask.sum()
+                
+                if empty_count > 0:
+                    logger.info(f"Found {empty_count} empty Business Partner Names")
+                    
+                    # Buscar columna con nombre del cliente (Id - Name)
+                    id_name_col = None
+                    for col in df.columns:
+                        if 'Id - Name' in col or 'ID - Name' in col:
+                            id_name_col = col
+                            break
+                    
+                    if id_name_col and id_name_col in df.columns:
+                        # Extraer parte después del " - " 
+                        def extract_name_from_id(value):
+                            if pd.isna(value):
+                                return '(Unknown Customer)'
+                            value_str = str(value)
+                            if ' - ' in value_str:
+                                return value_str.split(' - ', 1)[1].strip()
+                            return value_str.strip()
+                        
+                        # Aplicar fallback solo a los vacíos
+                        df.loc[empty_mask, 'Business Partner Name'] = df.loc[empty_mask, id_name_col].apply(extract_name_from_id)
+                        logger.info(f"Filled {empty_count} empty Business Partner Names from '{id_name_col}'")
+                    else:
+                        # Si no existe Id - Name, usar Unknown
+                        df.loc[empty_mask, 'Business Partner Name'] = '(Unknown Customer)'
+                        logger.info(f"No Id-Name column found, filled with '(Unknown Customer)'")
             
             # Process dates
             df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
@@ -1036,6 +1069,11 @@ if uploaded_file:
         df2 = df[(pd.to_datetime(df[col_fecha]) >= pd.to_datetime(start_date_2)) &
                 (pd.to_datetime(df[col_fecha]) <= pd.to_datetime(end_date_2))].copy()
 
+
+    # ✅ DEBUG: Check clientes vacíos
+    print(f"🔍 DEBUG - df1 clientes vacíos: {df1[col_cliente].isna().sum()}")
+    print(f"🔍 DEBUG - df2 clientes vacíos: {df2[col_cliente].isna().sum()}")
+
     logger.info(f"Period 1: {len(df1)} records, Period 2: {len(df2)} records")
 
     st.success(f"✅ **Periods defined:** {len(df1):,} records in {nombre_periodo_1}, {len(df2):,} records in {nombre_periodo_2}")
@@ -1134,6 +1172,10 @@ if uploaded_file:
     # Show filtering summary
     st.success(f"✅ **Filters applied:** {len(df1_filtrado):,} records in {nombre_periodo_1}, {len(df2_filtrado):,} records in {nombre_periodo_2}")
     
+    # ✅ DEBUG: Check clientes vacíos tras filtros
+    print(f"🔍 DEBUG - df1_filtrado clientes vacíos: {df1_filtrado[col_cliente].isna().sum()}")
+    print(f"🔍 DEBUG - df2_filtrado clientes vacíos: {df2_filtrado[col_cliente].isna().sum()}")
+
     if len(df1_filtrado) == 0 or len(df2_filtrado) == 0:
         st.warning("⚠️ No records found with the selected filters. Try adjusting your filters.")
         st.stop()
@@ -1153,6 +1195,11 @@ if uploaded_file:
         df1_filtrado["Amount"] = df1_filtrado[col_precio]
         df2_filtrado["Amount"] = df2_filtrado[col_precio]
     
+        # ✅ DEBUG: Verificar clientes antes de groupby
+        print(f"🔍 DEBUG - Clientes únicos en df1_filtrado: {df1_filtrado[col_cliente].nunique()}")
+        print(f"🔍 DEBUG - Clientes vacíos en df1_filtrado: {df1_filtrado[col_cliente].isna().sum()}")
+        print(f"🔍 DEBUG - Sample de clientes: {df1_filtrado[col_cliente].head(10).tolist()}")
+
     # Group by customer, product, sales representative, set and productline
     # Group by customer, product, sales representative, set and productline
     with st.spinner("🔄 Processing data and generating comparison..."):

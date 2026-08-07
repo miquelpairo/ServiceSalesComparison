@@ -1,67 +1,19 @@
 <script>
         // =============================
-        // ERROR OVERLAY - MUST BE FIRST
-        // =============================
-        window.onerror = function(msg, src, line, col, err) {
-            var d = document.getElementById('_mobileErr');
-            if (!d) {
-                d = document.createElement('div');
-                d.id = '_mobileErr';
-                d.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#c00;color:#fff;font-size:11px;padding:8px;z-index:99999;word-break:break-all;max-height:150px;overflow-y:auto;';
-                document.body.appendChild(d);
-            }
-            d.innerHTML += 'ERR: ' + msg + ' [line ' + line + ']<br>';
-            return false;
-        };
-
-        // =============================
-        // POLYFILLS (Safari / old Edge)
-        // =============================
-        if (!String.prototype.replaceAll) {
-            String.prototype.replaceAll = function(s, r) { return this.split(s).join(r); };
-        }
-
-        // =============================
         // EMBEDDED DATA
         // =============================
         const df1Data = {{ df1_json | safe }};
         const df2Data = {{ df2_json | safe }};
         const comparativaData = {{ comparativa_json | safe }};
         
-        let availableTypes = {{ available_types | tojson }};
-        let availableSets = {{ available_sets | tojson }};
-        let availableReps = {{ available_reps | tojson }};
-        let availableMarketOrgs = {{ available_market_orgs | tojson }};
-        let availableTerritories = {{ available_territories | tojson }};
-        let availableCountries = {{ available_countries | tojson }};
-        let availableSegments = {{ available_segments | tojson }};
-
-        function _deriveIfEmpty(arr, field) {
-            if (!Array.isArray(arr) || arr.length === 0) {
-                const s = new Set();
-                df1Data.forEach(r => { if (r[field] != null) s.add(r[field]); });
-                df2Data.forEach(r => { if (r[field] != null) s.add(r[field]); });
-                return Array.from(s).sort();
-            }
-            return arr;
-        }
-        if (!availableTypes.length)       availableTypes       = _deriveIfEmpty(availableTypes,       'ProductType');
-        if (!availableSets.length)        availableSets        = _deriveIfEmpty(availableSets,        'Set');
-        if (!availableReps.length)        availableReps        = _deriveIfEmpty(availableReps,        'SalesRepresentative');
-        if (!availableMarketOrgs.length)  availableMarketOrgs  = _deriveIfEmpty(availableMarketOrgs,  'Market Organization Name');
-        if (!availableTerritories.length) availableTerritories = _deriveIfEmpty(availableTerritories, 'Sales Territory');
-        if (!availableCountries.length)   availableCountries   = _deriveIfEmpty(availableCountries,   'Country');
-        if (!availableSegments.length)    availableSegments    = _deriveIfEmpty(availableSegments,    'End User Segment');
+        const availableTypes = {{ available_types | tojson }};
+        const availableSets = {{ available_sets | tojson }};
+        const availableReps = {{ available_reps | tojson }};
+        const availableMarketOrgs = {{ available_market_orgs | tojson }};
+        const availableTerritories = {{ available_territories | tojson }};
+        const availableCountries = {{ available_countries | tojson }};
+        const availableSegments = {{ available_segments | tojson }};
         
-		// Derive available months from data
-		const availableMonths = (function() {
-			const s = new Set();
-			df1Data.forEach(r => { if (r.Date) s.add(new Date(r.Date).getMonth() + 1); });
-			df2Data.forEach(r => { if (r.Date) s.add(new Date(r.Date).getMonth() + 1); });
-			return Array.from(s).sort((a, b) => a - b);
-		})();
-		
-		
         const nombreP1 = "{{ nombre_p1 }}";
         const nombreP2 = "{{ nombre_p2 }}";
         const hasSFDCLinks = {{ 'true' if has_sfdc_links else 'false' }};
@@ -89,7 +41,7 @@
             const rows = Array.from(table.querySelectorAll('tr'));
             const csv = rows.map(row => {
                 const cols = Array.from(row.querySelectorAll('th,td')).map(cell => {
-                    let text = (cell.textContent || '').trim();
+                    let text = (cell.textContent ?? '').trim();
                     text = text.replace(/"/g, '""');
                     if (/[",\n;]/.test(text)) text = `"${text}"`;
                     return text;
@@ -113,25 +65,25 @@
         function el(id) { return document.getElementById(id); }
         
         function safeLower(v) {
-            return String(v || '').toLowerCase();
+            return String(v ?? '').toLowerCase();
         }
         
         function keyRow(r) {
-            const customer = r['Business Partner Name'] || '$1';
-            const item = r.ItemIdAndName || '';
-            const rep = r.SalesRepresentative || '';
-            const setv = r.Set || '';
-            const type = r.ProductType || '';
+            const customer = r['Business Partner Name'] ?? '';
+            const item = r.ItemIdAndName ?? '';
+            const rep = r.SalesRepresentative ?? '';
+            const setv = r.Set ?? '';
+            const type = r.ProductType ?? '';
             return `${customer}|||${item}|||${rep}|||${setv}|||${type}`;
         }
 
         function escapeHtml(str) {
-            return String(str == null ? '' : str)
-                .replace(/&/g,  '&amp;')
-                .replace(/</g,  '&lt;')
-                .replace(/>/g,  '&gt;')
-                .replace(/"/g,  '&quot;')
-                .replace(/'/g,  '&#39;');
+            return String(str ?? '')
+                .replaceAll('&', '&amp;')
+                .replaceAll('<', '&lt;')
+                .replaceAll('>', '&gt;')
+                .replaceAll('"', '&quot;')
+                .replaceAll("'", '&#39;');
         }
         
         // ✅ FUNCIÓN PARA RENDERIZAR CUSTOMER CON SFDC LINK
@@ -172,14 +124,14 @@
         
         function customerSet(rows) {
             const s = new Set();
-            rows.forEach(r => s.add(r['Business Partner Name'] || '$1'));
+            rows.forEach(r => s.add(r['Business Partner Name'] ?? '(Unknown)'));
             return s;
         }
         
         function sumByCustomer(rows) {
             const m = new Map();
             rows.forEach(r => {
-                const c = r['Business Partner Name'] || '$1';
+                const c = r['Business Partner Name'] ?? '(Unknown)';
                 const v = Number(r.EUR || 0);
                 m.set(c, (m.get(c) || 0) + v);
             });
@@ -191,7 +143,6 @@
         // =============================
         function initializeFilters() {
             const typeBox = el('typeFilters');
-            if (!typeBox) { console.warn('typeFilters not found'); return; }
             availableTypes.forEach(t => {
                 const l = document.createElement('label');
                 const cb = document.createElement('input');
@@ -297,27 +248,12 @@
                     });
                 }
             }
-			
-			const monthBox = el('monthFilters');
-			if (monthBox) {
-				availableMonths.forEach(m => {
-					const l = document.createElement('label');
-					const cb = document.createElement('input');
-					cb.type = 'checkbox';
-					cb.value = m;
-					cb.checked = true;
-					cb.className = 'month-filter';
-					l.appendChild(cb);
-					l.append(' ' + monthNames[m - 1]);
-					monthBox.appendChild(l);
-				});
-			}
             
             const applyDebounced = debounce(applyFilters, 200);
-            document.querySelectorAll('.type-filter, .set-filter, .rep-filter, .mo-filter, .territory-filter, .country-filter, .segment-filter, .month-filter')
+            document.querySelectorAll('.type-filter, .set-filter, .rep-filter, .mo-filter, .territory-filter, .country-filter, .segment-filter')
                 .forEach(cb => cb.addEventListener('change', applyDebounced));
         }
-
+        
         // =============================
         // FILTER MANAGEMENT
         // =============================
@@ -329,8 +265,7 @@
                 mo: '.mo-filter',
                 territory: '.territory-filter',
                 country: '.country-filter',
-                segment: '.segment-filter',
-				month: '.month-filter'
+                segment: '.segment-filter'
             };
             const selector = map[group];
             if (!selector) return;
@@ -339,11 +274,11 @@
             applyFilters();
         }
         
-        function toggleQuickFilter(tagEl) {
-            const key = tagEl.getAttribute('data-keyword');
-            tagEl.classList.toggle('active');
+        function toggleQuickFilter(el) {
+            const key = el.getAttribute('data-keyword');
+            el.classList.toggle('active');
             
-            if (tagEl.classList.contains('active')) {
+            if (el.classList.contains('active')) {
                 activeQuickFilters.push(key);
             } else {
                 activeQuickFilters = activeQuickFilters.filter(k => k !== key);
@@ -363,7 +298,6 @@
             setAll('.territory-filter', true);
             setAll('.country-filter', true);
             setAll('.segment-filter', true);
-			setAll('.month-filter', true);
             
             activeQuickFilters = [];
             document.querySelectorAll('.quick-filter-tag')
@@ -387,12 +321,11 @@
             const sets = getCheckedValues('.set-filter');
             const reps = getCheckedValues('.rep-filter');
             const mos = getCheckedValues('.mo-filter');
-			const months = getCheckedValues('.month-filter').map(Number);
             const territories = getCheckedValues('.territory-filter');
             const countries = getCheckedValues('.country-filter');
             const segments = getCheckedValues('.segment-filter');
-            const _siEl = el('searchInput');   const manualSearch   = safeLower(_siEl   ? _siEl.value   : '');
-            const _ciEl = el('customerInput'); const customerSearch = safeLower(_ciEl   ? _ciEl.value   : '');
+            const manualSearch = safeLower(el('searchInput')?.value);
+            const customerSearch = safeLower(el('customerInput')?.value);
             
             function filterRow(row) {
                 if (!types.includes(row.ProductType)) return false;
@@ -403,10 +336,6 @@
                 if (territories.length > 0 && row['Sales Territory'] && !territories.includes(row['Sales Territory'])) return false;
                 if (countries.length > 0 && row['Country'] && !countries.includes(row['Country'])) return false;
                 if (segments.length > 0 && row['End User Segment'] && !segments.includes(row['End User Segment'])) return false;
-				if (months.length > 0 && row.Date) {
-					const rowMonth = new Date(row.Date).getMonth() + 1;
-					if (!months.includes(rowMonth)) return false;
-				}
                 
                 const item = safeLower(row.ItemIdAndName);
                 
@@ -438,12 +367,7 @@
                 return keysP1.has(key) || keysP2.has(key);
             });
             
-            _chartTypesDirty = true;
-            _chartSetsDirty  = true;
-            _chartTimeDirty  = true;
-
             updateMetrics();
-			buildProductSummary();
             updateCustomerMetrics();
             updateExpansionContraction();
             updateScopeBadge();
@@ -526,8 +450,8 @@
         
         function updateScopeBadge() {
             const types = new Set();
-            filteredP1.forEach(r => types.add(r.ProductType || '(Unknown)'));
-            filteredP2.forEach(r => types.add(r.ProductType || '(Unknown)'));
+            filteredP1.forEach(r => types.add(r.ProductType ?? '(Unknown)'));
+            filteredP2.forEach(r => types.add(r.ProductType ?? '(Unknown)'));
 
             const onlyContracts = (types.size === 1 && types.has('Service Contract'));
             const badge = el('scopeBadge');
@@ -664,162 +588,131 @@
             return clamp(560, min, max);
         }
 
-        // Lazy chart dirty flags
-        let _chartTypesDirty = true;
-        let _chartSetsDirty  = true;
-        let _chartTimeDirty  = true;
-
-        // ── Mobile helpers ──────────────────────────────────────────────
-        // True when screen is phone-sized in portrait OR landscape
-        function _isMobile() {
-            return Math.min(window.innerWidth, window.innerHeight) <= 430
-                || window.innerWidth <= 768;
-        }
-
-        // Compute left margin from longest label (6px/char, capped at max)
-        function _leftMargin(labels, minPx, maxPx) {
-            var longest = labels.reduce(function(m, s) { return Math.max(m, String(s).length); }, 0);
-            return Math.min(Math.max(longest * 6, minPx), maxPx);
-        }
-
-        // Truncate label to maxLen chars
-        function _trunc(s, maxLen) {
-            s = String(s);
-            return s.length > maxLen ? s.slice(0, maxLen - 1) + '…' : s;
-        }
-
-        function _buildRepsChart() {
+        function renderCharts() {
             const repsP1 = {};
             const repsP2 = {};
-            filteredP1.forEach(r => { const k = r.SalesRepresentative || '(Unknown)'; repsP1[k] = (repsP1[k] || 0) + (r.EUR || 0); });
-            filteredP2.forEach(r => { const k = r.SalesRepresentative || '(Unknown)'; repsP2[k] = (repsP2[k] || 0) + (r.EUR || 0); });
+
+            filteredP1.forEach(r => {
+                const k = r.SalesRepresentative ?? '(Unknown)';
+                repsP1[k] = (repsP1[k] || 0) + (r.EUR || 0);
+            });
+
+            filteredP2.forEach(r => {
+                const k = r.SalesRepresentative ?? '(Unknown)';
+                repsP2[k] = (repsP2[k] || 0) + (r.EUR || 0);
+            });
+
             const allReps = Array.from(new Set([...Object.keys(repsP1), ...Object.keys(repsP2)]));
-            if (allReps.length === 0) { renderEmptyChart('chartReps', 'Sales Representatives'); return; }
-            allReps.sort((a, b) => ((repsP1[a] || 0) + (repsP2[a] || 0)) - ((repsP1[b] || 0) + (repsP2[b] || 0)));
+            if (allReps.length === 0) {
+                renderEmptyChart('chartReps', 'Sales Representatives');
+            } else {
+                allReps.sort((a, b) => ((repsP1[a] || 0) + (repsP2[a] || 0)) - ((repsP1[b] || 0) + (repsP2[b] || 0)));
 
-            const mob = _isMobile();
-            const maxChars = mob ? 18 : 999;
-            const labels   = allReps.map(r => _trunc(r, maxChars));
-            const lMargin  = mob ? _leftMargin(labels, 90, 160) : 240;
-            const height   = mob
-                ? Math.min(120 + allReps.length * 28, 400)
-                : heightBarsHorizontal(allReps.length, { base: 260, perRow: 40, min: 620, max: 1700 });
+                Plotly.newPlot('chartReps', [
+                    { name: nombreP1, y: allReps, x: allReps.map(r => repsP1[r] || 0), type: 'bar', orientation: 'h', marker: { color: '#FF6B6B' } },
+                    { name: nombreP2, y: allReps, x: allReps.map(r => repsP2[r] || 0), type: 'bar', orientation: 'h', marker: { color: '#4ECDC4' } }
+                ], layoutWithBigLegend({
+                    barmode: 'group',
+                    height: heightBarsHorizontal(allReps.length, { base: 260, perRow: 40, min: 620, max: 1700 }),
+                    xaxis: { title: 'Sales (€)' },
+                    yaxis: { title: '', automargin: true }
+                }), plotlyConfig());
+            }
 
-            Plotly.newPlot('chartReps', [
-                { name: nombreP1, y: labels, x: allReps.map(r => repsP1[r] || 0), type: 'bar', orientation: 'h', marker: { color: '#FF6B6B' } },
-                { name: nombreP2, y: labels, x: allReps.map(r => repsP2[r] || 0), type: 'bar', orientation: 'h', marker: { color: '#4ECDC4' } }
-            ], {
-                autosize: true,
-                barmode: 'group',
-                height: height,
-                margin: mob ? { l: lMargin, r: 10, t: 30, b: 60 } : { l: lMargin, r: 30, t: 40, b: 60 },
-                legend: mob
-                    ? { orientation: 'h', x: 0, y: -0.15, xanchor: 'left', font: { size: 10 } }
-                    : { orientation: 'h', x: 1, xanchor: 'right', y: 1.02, yanchor: 'bottom', itemwidth: 60 },
-                xaxis: { title: 'Sales (€)' },
-                yaxis: { title: '', automargin: false, tickfont: { size: mob ? 10 : 12 } }
-            }, plotlyConfig());
-        }
-
-        function _buildTypesChart() {
             const typesP1 = {};
             const typesP2 = {};
-            filteredP1.forEach(r => { const k = r.ProductType || '(Unknown)'; typesP1[k] = (typesP1[k] || 0) + (r.EUR || 0); });
-            filteredP2.forEach(r => { const k = r.ProductType || '(Unknown)'; typesP2[k] = (typesP2[k] || 0) + (r.EUR || 0); });
+
+            filteredP1.forEach(r => {
+                const k = r.ProductType ?? '(Unknown)';
+                typesP1[k] = (typesP1[k] || 0) + (r.EUR || 0);
+            });
+
+            filteredP2.forEach(r => {
+                const k = r.ProductType ?? '(Unknown)';
+                typesP2[k] = (typesP2[k] || 0) + (r.EUR || 0);
+            });
+
             const allTypes = Array.from(new Set([...Object.keys(typesP1), ...Object.keys(typesP2)]));
-            if (allTypes.length === 0) { renderEmptyChart('chartTypes', 'Product Types'); return; }
-            allTypes.sort((a, b) => ((typesP1[a] || 0) + (typesP2[a] || 0)) - ((typesP1[b] || 0) + (typesP2[b] || 0)));
+            if (allTypes.length === 0) {
+                renderEmptyChart('chartTypes', 'Product Types');
+            } else {
+                allTypes.sort((a, b) => ((typesP1[a] || 0) + (typesP2[a] || 0)) - ((typesP1[b] || 0) + (typesP2[b] || 0)));
 
-            const mob = _isMobile();
-            const maxChars = mob ? 20 : 999;
-            const labels   = allTypes.map(t => _trunc(t, maxChars));
-            const lMargin  = mob ? _leftMargin(labels, 100, 180) : 240;
-            const height   = mob
-                ? Math.min(120 + allTypes.length * 28, 400)
-                : heightBarsHorizontal(allTypes.length, { base: 260, perRow: 40, min: 720, max: 1700 });
+                Plotly.newPlot('chartTypes', [
+                    { name: nombreP1, y: allTypes, x: allTypes.map(t => typesP1[t] || 0), type: 'bar', orientation: 'h', marker: { color: '#FF6B6B' } },
+                    { name: nombreP2, y: allTypes, x: allTypes.map(t => typesP2[t] || 0), type: 'bar', orientation: 'h', marker: { color: '#4ECDC4' } }
+                ], layoutWithBigLegend({
+                    barmode: 'group',
+                    height: heightBarsHorizontal(allTypes.length, { base: 260, perRow: 40, min: 720, max: 1700 }),
+                    xaxis: { title: 'Sales (€)' },
+                    yaxis: { title: '', automargin: true, tickfont: { size: 12 } }
+                }), plotlyConfig());
+            }
 
-            Plotly.newPlot('chartTypes', [
-                { name: nombreP1, y: labels, x: allTypes.map(t => typesP1[t] || 0), type: 'bar', orientation: 'h', marker: { color: '#FF6B6B' } },
-                { name: nombreP2, y: labels, x: allTypes.map(t => typesP2[t] || 0), type: 'bar', orientation: 'h', marker: { color: '#4ECDC4' } }
-            ], {
-                autosize: true,
-                barmode: 'group',
-                height: height,
-                margin: mob ? { l: lMargin, r: 10, t: 30, b: 60 } : { l: lMargin, r: 30, t: 40, b: 60 },
-                legend: mob
-                    ? { orientation: 'h', x: 0, y: -0.15, xanchor: 'left', font: { size: 10 } }
-                    : { orientation: 'h', x: 1, xanchor: 'right', y: 1.02, yanchor: 'bottom', itemwidth: 60 },
-                xaxis: { title: 'Sales (€)' },
-                yaxis: { title: '', automargin: false, tickfont: { size: mob ? 10 : 12 } }
-            }, plotlyConfig());
-        }
-
-        function _buildSetsChart() {
             const setsP1 = {};
             const setsP2 = {};
-            filteredP1.forEach(r => { const k = r.Set || '(Unknown)'; setsP1[k] = (setsP1[k] || 0) + (r.EUR || 0); });
-            filteredP2.forEach(r => { const k = r.Set || '(Unknown)'; setsP2[k] = (setsP2[k] || 0) + (r.EUR || 0); });
+
+            filteredP1.forEach(r => {
+                const k = r.Set ?? '(Unknown)';
+                setsP1[k] = (setsP1[k] || 0) + (r.EUR || 0);
+            });
+
+            filteredP2.forEach(r => {
+                const k = r.Set ?? '(Unknown)';
+                setsP2[k] = (setsP2[k] || 0) + (r.EUR || 0);
+            });
+
             const allSets = Array.from(new Set([...Object.keys(setsP1), ...Object.keys(setsP2)]));
-            if (allSets.length === 0) { renderEmptyChart('chartSets', 'Sets'); return; }
-            allSets.sort((a, b) => ((setsP1[a] || 0) + (setsP2[a] || 0)) - ((setsP1[b] || 0) + (setsP2[b] || 0)));
+            if (allSets.length === 0) {
+                renderEmptyChart('chartSets', 'Sets');
+            } else {
+                allSets.sort((a, b) => ((setsP1[a] || 0) + (setsP2[a] || 0)) - ((setsP1[b] || 0) + (setsP2[b] || 0)));
 
-            const mob = _isMobile();
-            const labels  = allSets.map(s => _trunc(s, mob ? 20 : 999));
-            const lMargin = mob ? _leftMargin(labels, 80, 160) : 80;
-            const height  = mob
-                ? Math.min(120 + allSets.length * 28, 400)
-                : heightBarsHorizontal(allSets.length, { base: 260, perRow: 45, min: 760, max: 2000 });
+                Plotly.newPlot('chartSets', [
+                    { name: nombreP1, y: allSets, x: allSets.map(s => setsP1[s] || 0), type: 'bar', orientation: 'h', marker: { color: '#FF6B6B' } },
+                    { name: nombreP2, y: allSets, x: allSets.map(s => setsP2[s] || 0), type: 'bar', orientation: 'h', marker: { color: '#4ECDC4' } }
+                ], baseLayout({
+                    barmode: 'group',
+                    height: heightBarsHorizontal(allSets.length, { base: 260, perRow: 45, min: 760, max: 2000 }),
+                    xaxis: { title: 'Sales (€)' },
+                    yaxis: { title: '', automargin: true, tickfont: { size: 12 } }
+                }), plotlyConfig());
+            }
 
-            Plotly.newPlot('chartSets', [
-                { name: nombreP1, y: labels, x: allSets.map(s => setsP1[s] || 0), type: 'bar', orientation: 'h', marker: { color: '#FF6B6B' } },
-                { name: nombreP2, y: labels, x: allSets.map(s => setsP2[s] || 0), type: 'bar', orientation: 'h', marker: { color: '#4ECDC4' } }
-            ], {
-                autosize: true,
-                barmode: 'group',
-                height: height,
-                margin: mob ? { l: lMargin, r: 10, t: 30, b: 60 } : { l: 80, r: 30, t: 40, b: 60 },
-                legend: mob
-                    ? { orientation: 'h', x: 0, y: -0.15, xanchor: 'left', font: { size: 10 } }
-                    : { orientation: 'h', yanchor: 'bottom', y: 1.02, xanchor: 'right', x: 1 },
-                xaxis: { title: 'Sales (€)' },
-                yaxis: { title: '', automargin: false, tickfont: { size: mob ? 10 : 12 } }
-            }, plotlyConfig());
-        }
-
-        function _buildTimeChart() {
             const monthsP1 = {};
             const monthsP2 = {};
-            filteredP1.forEach(r => { const m = new Date(r.Date).getMonth() + 1; monthsP1[m] = (monthsP1[m] || 0) + (r.EUR || 0); });
-            filteredP2.forEach(r => { const m = new Date(r.Date).getMonth() + 1; monthsP2[m] = (monthsP2[m] || 0) + (r.EUR || 0); });
-            const allMonths   = [1,2,3,4,5,6,7,8,9,10,11,12];
-            const monthLabels = allMonths.map(m => monthNames[m - 1]);
-            const anyData = allMonths.some(m => (monthsP1[m] || 0) !== 0 || (monthsP2[m] || 0) !== 0);
-            if (!anyData) { renderEmptyChart('chartTime', 'Time Evolution'); return; }
 
-            const mob = _isMobile();
-            Plotly.newPlot('chartTime', [
-                { name: nombreP1, x: monthLabels, y: allMonths.map(m => monthsP1[m] || 0), type: 'bar', marker: { color: '#FF6B6B' } },
-                { name: nombreP2, x: monthLabels, y: allMonths.map(m => monthsP2[m] || 0), type: 'bar', marker: { color: '#4ECDC4' } }
-            ], {
-                autosize: true,
-                barmode: 'group',
-                height: mob ? 260 : 560,
-                margin: mob ? { l: 40, r: 10, t: 30, b: 50 } : { l: 80, r: 30, t: 40, b: 60 },
-                legend: mob
-                    ? { orientation: 'h', x: 0, y: -0.18, xanchor: 'left', font: { size: 10 } }
-                    : { orientation: 'h', yanchor: 'bottom', y: 1.02, xanchor: 'right', x: 1 },
-                xaxis: { title: '', tickfont: { size: mob ? 9 : 12 } },
-                yaxis: { title: 'Sales (€)', tickfont: { size: mob ? 9 : 12 } }
-            }, plotlyConfig());
+            filteredP1.forEach(r => {
+                const d = new Date(r.Date);
+                const m = d.getMonth() + 1;
+                monthsP1[m] = (monthsP1[m] || 0) + (r.EUR || 0);
+            });
+
+            filteredP2.forEach(r => {
+                const d = new Date(r.Date);
+                const m = d.getMonth() + 1;
+                monthsP2[m] = (monthsP2[m] || 0) + (r.EUR || 0);
+            });
+
+            const allMonths = [1,2,3,4,5,6,7,8,9,10,11,12];
+            const monthLabels = allMonths.map(m => monthNames[m-1]);
+            const anyTimeData = allMonths.some(m => (monthsP1[m] || 0) !== 0 || (monthsP2[m] || 0) !== 0);
+
+            if (!anyTimeData) {
+                renderEmptyChart('chartTime', 'Time Evolution');
+            } else {
+                Plotly.newPlot('chartTime', [
+                    { name: nombreP1, x: monthLabels, y: allMonths.map(m => monthsP1[m] || 0), type: 'bar', marker: { color: '#FF6B6B' } },
+                    { name: nombreP2, x: monthLabels, y: allMonths.map(m => monthsP2[m] || 0), type: 'bar', marker: { color: '#4ECDC4' } }
+                ], baseLayout({
+                    barmode: 'group',
+                    height: heightBarsVertical({ min: 520, max: 720 }),
+                    xaxis: { title: '' },
+                    yaxis: { title: 'Sales (€)' }
+                }), plotlyConfig());
+            }
         }
-
-        function renderCharts() {
-            _buildRepsChart();
-            _chartTypesDirty = true;
-            _chartSetsDirty  = true;
-            _chartTimeDirty  = true;
-        }
-
+        
         // =============================
         // RENDER TABLES (✅ CON SFDC LINKS EN TODAS LAS TABLAS)
         // =============================
@@ -973,13 +866,13 @@
                 const p2 = new Map();
                 
                 filteredP1.forEach(r => {
-                    const c = r['Business Partner Name'] || '$1';
+                    const c = r['Business Partner Name'] ?? '(Unknown)';
                     const v = (r.EUR || 0);
                     p1.set(c, (p1.get(c) || 0) + v);
                 });
                 
                 filteredP2.forEach(r => {
-                    const c = r['Business Partner Name'] || '$1';
+                    const c = r['Business Partner Name'] ?? '(Unknown)';
                     const v = (r.EUR || 0);
                     p2.set(c, (p2.get(c) || 0) + v);
                 });
@@ -1034,11 +927,7 @@
             if (selectedTypes.length > 0 && selectedTypes.length < availableTypes.length) {
                 selectedTypes.forEach(v => chips.push(`Type:${v}`));
             }
-            const selectedMonths = getCheckedValues('.month-filter').map(Number);
-			if (selectedMonths.length > 0 && selectedMonths.length < availableMonths.length) {
-				selectedMonths.forEach(m => chips.push(`Month:${monthNames[m - 1]}`));
-			}
-			
+            
             const selectedSets = getCheckedValues('.set-filter');
             if (selectedSets.length > 0 && selectedSets.length < availableSets.length) {
                 selectedSets.forEach(v => chips.push(`Set:${v}`));
@@ -1121,8 +1010,8 @@
             const rows = Array.from(tbody.querySelectorAll('tr'));
             
             rows.sort((rowA, rowB) => {
-                const cellA = (rowA.cells[colIndex] ? rowA.cells[colIndex].textContent : '') || '';
-                const cellB = (rowB.cells[colIndex] ? rowB.cells[colIndex].textContent : '') || '';
+                const cellA = rowA.cells[colIndex]?.textContent || '';
+                const cellB = rowB.cells[colIndex]?.textContent || '';
                 
                 const numA = parseFloat(cellA.replace(/[€,%]/g, '').replace(/\./g, '').replace(',', '.'));
                 const numB = parseFloat(cellB.replace(/[€,%]/g, '').replace(/\./g, '').replace(',', '.'));
@@ -1142,143 +1031,6 @@
             rows.forEach(row => tbody.appendChild(row));
         }
         
-		// =============================
-		// PRODUCT SUMMARY
-		// =============================
-		const PRODUCT_FAMILIES = {
-			CARE: {
-				label: 'CARE',
-				match: name => name.toUpperCase().includes('CARE'),
-				subs: [
-					{ key: 'CARE Circle',    match: name => /CARE\s*CIRCLE/i.test(name) },
-					{ key: 'CARE CirclePlus', match: name => /CARE\s*CirclePlus/i.test(name) },
-					{ key: 'CARE Maintain',  match: name => /CARE\s*MAINTAIN/i.test(name) },
-					{ key: 'CARE Inspect',   match: name => /CARE\s*INSPECT/i.test(name) },
-					{ key: 'CARE Repair',    match: name => /CARE\s*REPAIR/i.test(name) }
-				]
-			},
-			START: {
-				label: 'START',
-				match: name => name.toUpperCase().includes('START'),
-				subs: [
-					{ key: 'START Install',   match: name => /START\s*INSTALL/i.test(name) },
-					{ key: 'START Circle',    match: name => /START\s*CIRCLE/i.test(name) },
-					{ key: 'START IQOQ',      match: name => /START\s*IQOQ/i.test(name) },
-					{ key: 'START Training',  match: name => /START\s*TRAINING/i.test(name) },
-					{ key: 'START Maintain',  match: name => /START\s*MAINTAIN/i.test(name) },
-					{ key: 'START Warranty',  match: name => /START\s*WARRANTY/i.test(name) }
-				]
-			},
-			EXACT: {
-				label: 'EXACT',
-				match: name => name.toUpperCase().includes('EXACT'),
-				subs: [
-					{ key: 'EXACT Circle',   match: name => /EXACT\s*CIRCLE/i.test(name) },
-					{ key: 'EXACT OQ',       match: name => /EXACT\s*OQ/i.test(name) }
-				]
-			}
-		};
-
-		function sumByItemName(rows, matchFn) {
-			return rows
-				.filter(r => matchFn(r.ItemIdAndName || ''))
-				.reduce((s, r) => s + (r.EUR || 0), 0);
-		}
-
-		function countByItemName(rows1, rows2, matchFn) {
-			const names = new Set();
-			[...rows1, ...rows2].forEach(r => {
-				if (matchFn(r.ItemIdAndName || '')) names.add(r.ItemIdAndName);
-			});
-			return names.size;
-		}
-
-		function renderProductMetricCards(containerId, p1, p2, nRecords) {
-			const container = el(containerId);
-			if (!container) return;
-			const diff = p2 - p1;
-			const pct  = p1 !== 0 ? (diff / p1 * 100) : (p2 > 0 ? 100 : 0);
-			const sign  = diff >= 0 ? '+' : '';
-			const color = diff >= 0 ? '#28a745' : '#dc3545';
-
-			container.innerHTML = `
-				<div class="metric-card white">
-					<div class="label">${nombreP1} €</div>
-					<div class="value">€${formatNumber(p1)}</div>
-				</div>
-				<div class="metric-card white">
-					<div class="label">${nombreP2} €</div>
-					<div class="value">€${formatNumber(p2)}</div>
-				</div>
-				<div class="metric-card white">
-					<div class="label">Difference €</div>
-					<div class="value">€${formatNumber(diff)}</div>
-					<div class="delta" style="color:${color}">${sign}${pct.toFixed(1)}%</div>
-				</div>
-				<div class="metric-card white">
-					<div class="label">Nº Records</div>
-					<div class="value">${nRecords}</div>
-				</div>
-			`;
-		}
-
-		function buildProductSummary() {
-			Object.entries(PRODUCT_FAMILIES).forEach(([familyKey, family]) => {
-				// Totales familia
-				const p1 = sumByItemName(filteredP1, family.match);
-				const p2 = sumByItemName(filteredP2, family.match);
-				const n  = countByItemName(filteredP1, filteredP2, family.match);
-				renderProductMetricCards(`productSummary${familyKey}`, p1, p2, n);
-
-				// Subcategorías
-				const subContainer = el(`productSummary${familyKey}_sub`);
-				if (!subContainer) return;
-				subContainer.innerHTML = '';
-
-				family.subs.forEach(sub => {
-					const sp1 = sumByItemName(filteredP1, sub.match);
-					const sp2 = sumByItemName(filteredP2, sub.match);
-					const sn  = countByItemName(filteredP1, filteredP2, sub.match);
-
-					if (sp1 === 0 && sp2 === 0) return; // ocultar subs sin datos
-
-					const wrapper = document.createElement('div');
-					wrapper.style.cssText = 'margin-bottom: 12px;';
-					wrapper.innerHTML = `<div style="font-weight:600; font-size:0.9rem; color:#555; margin-bottom:4px; padding-left:4px;">↳ ${sub.key}</div>`;
-
-					const metricsDiv = document.createElement('div');
-					metricsDiv.className = 'metrics';
-					wrapper.appendChild(metricsDiv);
-					subContainer.appendChild(wrapper);
-
-					const sdiff = sp2 - sp1;
-					const spct  = sp1 !== 0 ? (sdiff / sp1 * 100) : (sp2 > 0 ? 100 : 0);
-					const ssign = sdiff >= 0 ? '+' : '';
-					const scolor = sdiff >= 0 ? '#28a745' : '#dc3545';
-
-					metricsDiv.innerHTML = `
-						<div class="metric-card white">
-							<div class="label">${nombreP1} €</div>
-							<div class="value" style="font-size:1.1rem;">€${formatNumber(sp1)}</div>
-						</div>
-						<div class="metric-card white">
-							<div class="label">${nombreP2} €</div>
-							<div class="value" style="font-size:1.1rem;">€${formatNumber(sp2)}</div>
-						</div>
-						<div class="metric-card white">
-							<div class="label">Difference €</div>
-							<div class="value" style="font-size:1.1rem;">€${formatNumber(sdiff)}</div>
-							<div class="delta" style="color:${scolor}">${ssign}${spct.toFixed(1)}%</div>
-						</div>
-						<div class="metric-card white">
-							<div class="label">Nº Records</div>
-							<div class="value" style="font-size:1.1rem;">${sn}</div>
-						</div>
-					`;
-				});
-			});
-		}
-		
         // =============================
         // BOOT
         // =============================
@@ -1286,69 +1038,49 @@
             initializeFilters();
             applyFilters();
 
-            const allChartIds = ['chartReps','chartTypes','chartSets','chartTime'];
-            function fixAllCharts() { forceResizeByIds(allChartIds); }
-
-            requestAnimationFrame(() => {
+            setTimeout(() => {
                 resizeVisibleCharts($('#chartsTabContent .tab-pane.active'));
                 forceResizeByIds(['chartReps']);
-            });
-
-            [100, 300, 700, 1500, 3000].forEach(ms => setTimeout(fixAllCharts, ms));
+            }, 0);
 
             $('#chartsTab a[data-toggle="tab"]').on('shown.bs.tab', function (e) {
                 const targetId = $(e.target).attr('href');
                 const $pane = $(targetId);
 
-                const cfg = {
-                    '#reps-chart':  { ids: ['chartReps'],  fn: null,             dirty: null,                       clear: null },
-                    '#types-chart': { ids: ['chartTypes'], fn: _buildTypesChart, dirty: () => _chartTypesDirty,     clear: () => { _chartTypesDirty = false; } },
-                    '#sets-chart':  { ids: ['chartSets'],  fn: _buildSetsChart,  dirty: () => _chartSetsDirty,      clear: () => { _chartSetsDirty  = false; } },
-                    '#time-chart':  { ids: ['chartTime'],  fn: _buildTimeChart,  dirty: () => _chartTimeDirty,      clear: () => { _chartTimeDirty  = false; } }
-                }[targetId];
+                const map = {
+                    '#reps-chart':  ['chartReps'],
+                    '#types-chart': ['chartTypes'],
+                    '#sets-chart':  ['chartSets'],
+                    '#time-chart':  ['chartTime']
+                };
 
-                if (!cfg) return;
+                const ids = map[targetId] || [];
 
                 function fix() {
-                    if (cfg.fn && cfg.dirty && cfg.dirty()) { cfg.fn(); cfg.clear(); }
                     resizeVisibleCharts($pane);
-                    forceResizeByIds(cfg.ids);
+                    forceResizeByIds(ids);
                 }
 
                 requestAnimationFrame(fix);
-                [50, 200, 500].forEach(ms => setTimeout(fix, ms));
+                setTimeout(fix, 50);
+                setTimeout(fix, 180);
+                setTimeout(fix, 450);
             });
 
             $(window).on('resize', function () {
-                clearTimeout(window._resizeTimer);
-                window._resizeTimer = setTimeout(fixAllCharts, 150);
+                resizeVisibleCharts($('.tab-content'));
             });
-
-            window.addEventListener('orientationchange', function() {
-                setTimeout(fixAllCharts, 300);
-            });
-
-            const sidebar = document.querySelector('.sidebar');
-            if (sidebar) {
-                sidebar.addEventListener('transitionend', function() {
-                    if (_isMobile()) setTimeout(fixAllCharts, 50);
-                });
-            }
         });
 
 		// Sidebar responsive
-        function toggleSidebar() {
-            var s = document.querySelector('.sidebar');
-            var o = document.getElementById('sidebarOverlay');
-            if (s) s.classList.toggle('open');
-            if (o) o.classList.toggle('active');
-        }
-        function closeSidebar() {
-            var s = document.querySelector('.sidebar');
-            var o = document.getElementById('sidebarOverlay');
-            if (s) s.classList.remove('open');
-            if (o) o.classList.remove('active');
-        }
+		function toggleSidebar() {
+			document.querySelector('.sidebar').classList.toggle('open');
+			document.getElementById('sidebarOverlay').classList.toggle('active');
+		}
+		function closeSidebar() {
+			document.querySelector('.sidebar').classList.remove('open');
+			document.getElementById('sidebarOverlay').classList.remove('active');
+		}
 		// Cerrar sidebar al aplicar filtros en movil
 		var origApply = window.applyFilters;
 		window.applyFilters = function() {

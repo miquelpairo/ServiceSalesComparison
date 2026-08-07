@@ -20,6 +20,11 @@
     {% include 'partials/_styles.html' %}
 </head>
 <body>
+
+	<!-- Boton hamburguesa (solo visible en movil) -->
+	<button class="sidebar-toggle" onclick="toggleSidebar()" aria-label="Toggle filters">☰</button>
+	<!-- Overlay -->
+	<div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
     <!-- SIDEBAR -->
     <div class="sidebar">
         <h2>📋 Índice</h2>
@@ -49,7 +54,18 @@
                     <div class="checkbox-group" id="typeFilters"></div>
                 </details>
             </div>
-            
+            <div class="filter-group">
+				<details>
+					<summary>
+						<span class="summary-text">📅 Month</span>
+						<span class="filter-actions">
+							<button type="button" class="mini-btn" onclick="setGroupChecked('month', true); event.preventDefault(); event.stopPropagation();">All</button>
+							<button type="button" class="mini-btn" onclick="setGroupChecked('month', false); event.preventDefault(); event.stopPropagation();">None</button>
+						</span>
+					</summary>
+					<div class="checkbox-group" id="monthFilters"></div>
+				</details>
+			</div>
             <div class="filter-group">
                 <details>
                     <summary>
@@ -223,7 +239,48 @@
                     <div class="value" id="metricTotal">{{ "{:,}".format(metrics.total_records) }}</div>
                 </div>
             </div>
-            
+
+			<!-- PRODUCT SUMMARY -->
+			<details id="product-summary-section" style="margin: 20px 0;">
+				<summary style="cursor:pointer; font-size:1.2rem; font-weight:600; padding: 8px 0;">
+					Product Summary
+				</summary>
+				<div style="margin-top: 12px;">
+					<!-- CARE -->
+					<details open style="margin-bottom: 10px;">
+						<summary style="cursor:pointer; font-weight:600; font-size:1rem; padding:6px 0;">
+							CARE
+						</summary>
+						<div class="metrics" id="productSummaryCARE" style="margin-top:8px;"></div>
+						<details style="margin-top:6px; margin-left:16px;">
+							<summary style="cursor:pointer; color:#555;">Subcategories</summary>
+							<div class="metrics" id="productSummaryCARE_sub" style="margin-top:8px;"></div>
+						</details>
+					</details>
+					<!-- START -->
+					<details open style="margin-bottom: 10px;">
+						<summary style="cursor:pointer; font-weight:600; font-size:1rem; padding:6px 0;">
+							START
+						</summary>
+						<div class="metrics" id="productSummarySTART" style="margin-top:8px;"></div>
+						<details style="margin-top:6px; margin-left:16px;">
+							<summary style="cursor:pointer; color:#555;">Subcategories</summary>
+							<div class="metrics" id="productSummarySTART_sub" style="margin-top:8px;"></div>
+						</details>
+					</details>
+					<!-- EXACT -->
+					<details open style="margin-bottom: 10px;">
+						<summary style="cursor:pointer; font-weight:600; font-size:1rem; padding:6px 0;">
+							EXACT
+						</summary>
+						<div class="metrics" id="productSummaryEXACT" style="margin-top:8px;"></div>
+						<details style="margin-top:6px; margin-left:16px;">
+							<summary style="cursor:pointer; color:#555;">Subcategories</summary>
+							<div class="metrics" id="productSummaryEXACT_sub" style="margin-top:8px;"></div>
+						</details>
+					</details>
+				</div>
+			</details>
             <h2>Customer Summary</h2>
             
             <div class="metrics">

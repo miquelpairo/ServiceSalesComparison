@@ -24,7 +24,7 @@ ORIGINAL_FORMAT = {
 NEW_FORMAT = {
     'Date': 'Date',
     'Business Partner Name': 'End User',  # Mapped from End User
-    'ItemIdAndName': 'Id - Name.1',  # Second Id - Name column (product)
+    'ItemIdAndName': 'Product Id - Name',  # Second Id - Name column (product)
     'ProductType': 'Product Type',  # Space instead of no space
     'Qty': 'Qty',
     'EUR': 'LC',  # Local Currency
@@ -35,16 +35,17 @@ NEW_FORMAT = {
 
 # Mixed format (actual current Power BI export format)
 # This format has columns already standardized but with slight variations
+# Mixed format (actual current Power BI export format)
 MIXED_FORMAT = {
     'Date': 'Date',
-    'Business Partner Name': 'End User',  # Maps from End User column
-    'ItemIdAndName': 'Id - Name.1',  # Second Id - Name column (product/service) - pandas auto-renames to .1
-    'ProductType': 'Product Type',  # Has space
+    'Business Partner Name': 'End User', 
+    'ItemIdAndName': 'Product Id - Name', # <-- CANVIA AIXÒ PEL NOM EXACTE DE L'EXCEL
+    'ProductType': 'Product Type', 
     'Qty': 'Qty',
-    'EUR': 'LC',  # Local Currency
-    'SalesRepresentative': 'Sales Representative',  # Has space
+    'EUR': 'LC', 
+    'SalesRepresentative': 'Sales Representative', 
     'Set': 'Set',
-    'Productline': 'Product Line'  # Has space
+    'Productline': 'Product Line' 
 }
 
 # Additional columns to preserve from new/mixed format
@@ -97,7 +98,7 @@ def detect_format(columns):
     
     # Check for mixed format signature (current actual format)
     # Has: End User, LC, Product Type (with space), Sales Representative (with space), Product Line (with space), Id - Name.1
-    mixed_format_signatures = ['End User', 'LC', 'Product Type', 'Sales Representative', 'Product Line', 'Id - Name.1']
+    mixed_format_signatures = ['End User', 'LC', 'Product Type', 'Sales Representative', 'Product Line', 'Product Id - Name']
     mixed_format_match = sum(1 for sig in mixed_format_signatures if sig in columns_set)
     
     # Check for new format signature columns (pure new format - not used yet)

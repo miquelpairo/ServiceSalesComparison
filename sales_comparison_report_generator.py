@@ -12,6 +12,117 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from core.report_utils import load_buchi_css, get_sidebar_styles, get_common_report_styles
 from app_config.plotting import BUCHI_COLORS
 
+# =============================================================================
+# CDN EMBEDDING - Makes HTML work offline / from file:// (e.g. iPhone Safari)
+# =============================================================================
+
+# Cache folder: same directory as this script
+_CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.cdn_cache')
+
+# CDN resources to embed. Order matters for JS (jquery -> popper -> bootstrap).
+_CDN_RESOURCES = [
+    {
+        "tag":   "bootstrap_css",
+        "url":   "https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css",
+        "file":  "bootstrap.4.5.2.min.css",
+        "type":  "css",
+    },
+    {
+        "tag":   "jquery_js",
+        "url":   "https://code.jquery.com/jquery-3.5.1.min.js",
+        "file":  "jquery.3.5.1.min.js",
+        "type":  "js",
+    },
+    {
+        "tag":   "popper_js",
+        "url":   "https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js",
+        "file":  "popper.1.16.1.min.js",
+        "type":  "js",
+    },
+    {
+        "tag":   "bootstrap_js",
+        "url":   "https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js",
+        "file":  "bootstrap.4.5.2.min.js",
+        "type":  "js",
+    },
+    {
+        "tag":   "plotly_js",
+        "url":   "https://cdn.plot.ly/plotly-2.26.0.min.js",
+        "file":  "plotly.2.26.0.min.js",
+        "type":  "js",
+    },
+]
+
+
+def _fetch_cdn_resource(url: str, cache_path: str) -> str:
+    """Download a CDN resource and cache it locally. Returns the content."""
+    import urllib.request
+    print(f"  [CDN] Downloading: {url}", flush=True)
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        content = r.read().decode("utf-8", errors="replace")
+    os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+    with open(cache_path, "w", encoding="utf-8") as f:
+        f.write(content)
+    print(f"  [CDN] Cached: {os.path.basename(cache_path)} ({len(content)//1024} KB)", flush=True)
+    return content
+
+
+def _get_cdn_content(resource: dict) -> str:
+    """Return CDN resource content, using cache if available."""
+    cache_path = os.path.join(_CACHE_DIR, resource["file"])
+    if os.path.exists(cache_path):
+        with open(cache_path, "r", encoding="utf-8") as f:
+            return f.read()
+    return _fetch_cdn_resource(resource["url"], cache_path)
+
+
+def _embed_cdn_resources(html: str) -> str:
+    """
+    Replace CDN <link> and <script src=...> tags with inline content.
+    Falls back to original CDN tags if download fails.
+
+    IMPORTANT: uses lambda replacements in re.sub to avoid re interpreting
+    backslashes in minified JS/CSS content (e.g. \\D, \\S regex chars).
+    """
+    import re
+
+    for res in _CDN_RESOURCES:
+        try:
+            content = _get_cdn_content(res)
+        except Exception as e:
+            print(f"  [CDN] WARNING: Could not embed {res['file']}: {e}", flush=True)
+            continue  # keep original CDN tag — better than nothing
+
+        if res["type"] == "css":
+            inline_css = f'<style>{content}</style>'
+            lib_name = res["file"].split(".")[0].lower()  # "bootstrap"
+            pattern = (
+                r'<link\s[^>]*href=["\'][^"\']*' + lib_name + r'[^"\']*\.css["\'][^>]*>'
+            )
+            html = re.sub(pattern, lambda m: inline_css, html, count=1, flags=re.IGNORECASE)
+
+        else:
+            inline_js = f'<script>{content}</script>'
+            lib_name = res["file"].split(".")[0].lower()  # "jquery", "popper", "bootstrap", "plotly"
+
+            # Try exact URL match first
+            pattern_exact = (
+                r'<script\s[^>]*src=["\']' + re.escape(res["url"]) + r'["\'][^>]*>\s*</script>'
+            )
+            new_html = re.sub(pattern_exact, lambda m: inline_js, html, flags=re.IGNORECASE)
+            if new_html != html:
+                html = new_html
+                continue
+
+            # Fallback: match by library name (handles .min vs non-min, version differences)
+            pattern_name = (
+                r'<script\s[^>]*src=["\'][^"\']*' + lib_name + r'[^"\']*\.js["\'][^>]*>\s*</script>'
+            )
+            html = re.sub(pattern_name, lambda m: inline_js, html, count=1, flags=re.IGNORECASE)
+
+    return html
+
 
 def generate_sales_comparison_html(
     df1_filtrado: pd.DataFrame,
@@ -223,4 +334,10 @@ def generate_sales_comparison_html(
         has_sfdc_links=has_sfdc_links
     )
     
+    # =========================================================================
+    # EMBED CDN RESOURCES (makes HTML work from file:// on iPhone/Safari)
+    # =========================================================================
+    print("[CDN] Embedding libraries for offline use...", flush=True)
+    html_content = _embed_cdn_resources(html_content)
+
     return html_content

@@ -660,5 +660,146 @@
         .sfdc-link.with-badge:hover::before {
             background-color: #005fb2;
         }
+		/* =====================================================
+		   MOBILE IMPROVEMENTS v2 - Tables, Charts & Sidebar
+		   Añadir al FINAL del bloque <style> en _styles.html
+		   ===================================================== */
 
+		/* ── Sidebar: ocultar en portrait Y landscape de móvil ── */
+		/* iPhone 14: 390×844. En landscape: 844×390.
+		   Usamos max-height para capturar landscape (height ≤ 430) */
+		@media (max-width: 768px),
+			   (max-height: 430px) and (orientation: landscape) {
+
+			.sidebar-toggle {
+				display: block !important;
+			}
+
+			.sidebar {
+				position: fixed !important;
+				left: -420px !important;
+				top: 0 !important;
+				height: 100vh !important;
+				width: 85vw !important;
+				max-width: 360px !important;
+				z-index: 1000 !important;
+				transition: left 0.3s ease !important;
+				overflow-y: auto !important;
+				box-shadow: 4px 0 20px rgba(0,0,0,0.3) !important;
+			}
+
+			.sidebar.open {
+				left: 0 !important;
+			}
+
+			.main-content {
+				margin-left: 0 !important;
+				padding: 12px !important;
+				padding-top: 52px !important;
+			}
+
+			/* Títulos compactos */
+			.main-content h1 { font-size: 1.2rem !important; }
+			.main-content h2 { font-size: 1rem !important; }
+
+			/* Métricas: 2 columnas */
+			.metrics {
+				grid-template-columns: repeat(2, 1fr) !important;
+				gap: 8px !important;
+			}
+			.metric-card { padding: 12px 8px !important; }
+			.metric-card .value { font-size: 1.2rem !important; }
+			.metric-card .label { font-size: 0.72rem !important; }
+
+			/* Lost/New customers: apilar */
+			.row .col-md-6 {
+				width: 100% !important;
+				max-width: 100% !important;
+				flex: 0 0 100% !important;
+				margin-bottom: 16px;
+			}
+
+			/* ── Tablas con primera columna sticky ── */
+			.table-container {
+				overflow-x: auto !important;
+				-webkit-overflow-scrolling: touch;
+				max-height: 65vh !important;
+			}
+
+			table {
+				min-width: unset !important;
+				table-layout: auto !important;
+			}
+
+			td:first-child,
+			th:first-child {
+				position: sticky !important;
+				left: 0 !important;
+				z-index: 5 !important;
+				background-color: #fff !important;
+				min-width: 100px !important;
+				max-width: 140px !important;
+				overflow: hidden !important;
+				text-overflow: ellipsis !important;
+				white-space: nowrap !important;
+				box-shadow: 2px 0 5px rgba(0,0,0,0.10) !important;
+			}
+
+			th:first-child {
+				background-color: #1a3a5c !important;
+				z-index: 15 !important;
+				color: white !important;
+			}
+
+			td, th {
+				padding: 7px 6px !important;
+				font-size: 12px !important;
+				white-space: nowrap !important;
+			}
+
+			/* ── Gráficos compactos ── */
+			#chartReps, #chartTypes, #chartSets, #chartTime {
+				min-height: 240px !important;
+				max-height: 400px !important;
+			}
+
+			.chart-container {
+				padding: 4px 2px !important;
+				margin: 6px 0 !important;
+			}
+
+			.tab-pane { padding: 8px 4px !important; }
+
+			.nav-tabs .nav-link {
+				padding: 8px 10px !important;
+				font-size: 12px !important;
+				white-space: nowrap;
+			}
+
+			.nav-tabs {
+				flex-wrap: nowrap !important;
+				overflow-x: auto !important;
+				overflow-y: hidden !important;
+				-webkit-overflow-scrolling: touch;
+				scrollbar-width: none;
+			}
+			.nav-tabs::-webkit-scrollbar { display: none; }
+		}
+
+		@media (max-width: 480px) {
+			.metrics { grid-template-columns: 1fr !important; }
+
+			td:first-child, th:first-child {
+				min-width: 85px !important;
+				max-width: 115px !important;
+				font-size: 11px !important;
+			}
+
+			td, th { font-size: 11px !important; padding: 5px 4px !important; }
+
+			#chartReps, #chartTypes, #chartSets, #chartTime {
+				min-height: 200px !important;
+				max-height: 340px !important;
+			}
+		}
 </style>

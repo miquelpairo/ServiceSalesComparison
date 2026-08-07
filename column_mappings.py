@@ -85,34 +85,23 @@ REQUIRED_COLUMNS = [
 # =============================================================================
 
 def detect_format(columns):
-    """
-    Detect which format the input file uses
-    
-    Args:
-        columns (list): List of column names from the DataFrame
-        
-    Returns:
-        str: 'original', 'new', 'mixed', or 'unknown'
-    """
     columns_set = set(columns)
     
-    # Check for mixed format signature (current actual format)
-    # Has: End User, LC, Product Type (with space), Sales Representative (with space), Product Line (with space), Id - Name.1
+    # Check for mixed format signature
     mixed_format_signatures = ['End User', 'LC', 'Product Type', 'Sales Representative', 'Product Line', 'Product Id - Name']
     mixed_format_match = sum(1 for sig in mixed_format_signatures if sig in columns_set)
     
-    # Check for new format signature columns (pure new format - not used yet)
-    new_format_signatures = ['End User', 'LC', 'Id - Name.1']
+    # Check for new format signature (SENSE 'Id - Name.1')
+    new_format_signatures = ['End User', 'LC', 'Product Id - Name']
     new_format_match = sum(1 for sig in new_format_signatures if sig in columns_set)
     
-    # Check for original format signature columns
+    # Check for original format signature
     original_format_signatures = ['Business Partner Name', 'EUR', 'ProductType', 'SalesRepresentative', 'Productline', 'ItemIdAndName']
     original_format_match = sum(1 for sig in original_format_signatures if sig in columns_set)
     
-    # Detect based on matches
-    if mixed_format_match >= 5:  # If at least 5 signatures match, it's mixed format
+    if mixed_format_match >= 4:
         return 'mixed'
-    elif original_format_match >= 5:
+    elif original_format_match >= 4:
         return 'original'
     elif new_format_match >= 2:
         return 'new'
@@ -139,16 +128,8 @@ def get_mapping_for_format(format_type):
         return None
 
 def get_additional_columns(format_type):
-    """
-    Get list of additional columns to preserve
-    
-    Args:
-        format_type (str): 'original' or 'new'
-        
-    Returns:
-        list: List of additional column names to preserve
-    """
-    if format_type == 'new':
+    # Ara retorna les columnes addicionals tant per a 'new' com per a 'mixed'
+    if format_type in ['new', 'mixed']:
         return ADDITIONAL_COLUMNS_NEW_FORMAT
     else:
         return []
